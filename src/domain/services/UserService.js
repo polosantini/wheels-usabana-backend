@@ -4,7 +4,7 @@ const CreateUserDto = require('../dtos/CreateUserDto');
 const UpdateProfileDto = require('../dtos/UpdateProfileDto');
 const UserResponseDto = require('../dtos/UserResponseDto');
 const DuplicateError = require('../errors/DuplicateError');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const fs = require('fs').promises;
 const path = require('path');
 
