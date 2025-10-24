@@ -29,13 +29,13 @@ app.use(helmet());
 // CORS Configuration for JWT cookies and credentials
 // Allows cross-origin requests with credentials (cookies)
 const allowedOrigins = process.env.CORS_ORIGINS 
-  ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
+  ? (process.env.CORS_ORIGINS === '*' ? '*' : process.env.CORS_ORIGINS.split(',').map(origin => origin.trim()))
   : ['http://localhost:5173'];
 
 app.use(cors({
-  origin: allowedOrigins,
+  origin: allowedOrigins === '*' ? true : allowedOrigins,
   credentials: true, // CRITICAL: Allow cookies in cross-origin requests
-  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS', 'PUT'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
   exposedHeaders: ['Set-Cookie'],
   maxAge: 86400 // 24 hours preflight cache

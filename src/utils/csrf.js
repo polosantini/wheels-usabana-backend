@@ -55,12 +55,10 @@ function validateCsrfToken(cookieToken, headerToken) {
  * @param {Object} options - Cookie options
  */
 function setCsrfCookie(res, token, options = {}) {
-  const isProduction = process.env.NODE_ENV === 'production';
-  
   res.cookie('csrf_token', token, {
     httpOnly: false,           // CRITICAL: Must be readable by JS
-    secure: isProduction,      // HTTPS only in production
-    sameSite: isProduction ? 'strict' : 'lax',
+    secure: true,              // Always require HTTPS (Vercel uses HTTPS)
+    sameSite: 'none',          // Allow cross-site cookies (required for different Vercel domains)
     maxAge: 2 * 60 * 60 * 1000, // 2 hours (match JWT expiry)
     path: '/',
     ...options

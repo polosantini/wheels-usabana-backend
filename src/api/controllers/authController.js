@@ -74,8 +74,8 @@ class AuthController {
 
       res.cookie('access_token', token, {
         httpOnly: true,              // CRITICAL: Prevents XSS attacks (JS cannot read)
-        secure: isProduction,        // HTTPS only in production
-        sameSite: isProduction ? 'strict' : 'lax', // CSRF protection
+        secure: true,                // Always require HTTPS (Vercel uses HTTPS)
+        sameSite: 'none',            // Allow cross-site cookies (required for different Vercel domains)
         maxAge: cookieMaxAge,
         path: '/'                    // Available to all routes
       });
