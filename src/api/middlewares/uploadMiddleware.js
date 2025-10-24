@@ -2,16 +2,31 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Crear directorios de uploads si no existen
-const uploadBaseDir = process.env.UPLOAD_DIR || 'uploads';
+// En Vercel, usar /tmp (único directorio escribible en serverless)
+const isVercel = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production';
+const uploadBaseDir = isVercel ? '/tmp' : (process.env.UPLOAD_DIR || 'uploads');
 const profileUploadDir = `${uploadBaseDir}/profiles`;
 const vehicleUploadDir = `${uploadBaseDir}/vehicles`;
 
-[profileUploadDir, vehicleUploadDir].forEach(dir => {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+// Solo crear directorios si no estamos en Vercel o si no existen
+if (!isVercel) {
+  [profileUploadDir, vehicleUploadDir].forEach(dir => {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  });
+} else {
+  // En Vercel, intentar crear directorios en /tmp (siempre disponible)
+  try {
+    [profileUploadDir, vehicleUploadDir].forEach(dir => {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    });
+  } catch (err) {
+    console.warn('Could not create upload directories (using memory storage):', err.message);
   }
-});
+}
 
 // Configuración de storage para perfiles de usuario
 const profileStorage = multer.diskStorage({
