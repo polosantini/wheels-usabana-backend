@@ -1,0 +1,98 @@
+###
+# Manual Testing Script for GET /auth/me
+# 
+# This file uses the REST Client extension for VS Code
+# or can be converted to curl commands
+#
+# Prerequisites:
+# 1. Server must be running (npm run dev)
+# 2. MongoDB must be connected
+# 3. Test users must exist in database
+###
+
+### Variables
+@baseUrl = http://localhost:3001
+@email = supertest@unisabana.edu.co
+@password = TestPassword123!
+@driverEmail = testdriver@unisabana.edu.co
+@driverWithVehicleEmail = testdrivervehicle@unisabana.edu.co
+
+### 1. LOGIN as Passenger (get access_token cookie)
+# @name login_passenger
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "corporateEmail": "{{email}}",
+  "password": "{{password}}"
+}
+
+### 2. GET /auth/me with valid session (Passenger)
+# Should return 200 with minimal identity DTO
+# Should NOT include driver object
+GET {{baseUrl}}/auth/me
+Cookie: {{login_passenger.response.headers.set-cookie}}
+
+### 3. GET /auth/me without cookie (should return 401)
+GET {{baseUrl}}/auth/me
+
+### 4. GET /auth/me with invalid token (should return 401)
+GET {{baseUrl}}/auth/me
+Cookie: access_token=invalid.token.here
+
+### 5. LOGIN as Driver WITHOUT vehicle
+# @name login_driver
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "corporateEmail": "{{driverEmail}}",
+  "password": "{{password}}"
+}
+
+### 6. GET /auth/me as Driver WITHOUT vehicle
+# Should return 200 with driver.hasVehicle=false
+GET {{baseUrl}}/auth/me
+Cookie: {{login_driver.response.headers.set-cookie}}
+
+### 7. LOGIN as Driver WITH vehicle
+# @name login_driver_vehicle
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "corporateEmail": "{{driverWithVehicleEmail}}",
+  "password": "{{password}}"
+}
+
+### 8. GET /auth/me as Driver WITH vehicle
+# Should return 200 with driver.hasVehicle=true
+GET {{baseUrl}}/auth/me
+Cookie: {{login_driver_vehicle.response.headers.set-cookie}}
+
+### 9. Verify Cache-Control header
+# Response should include Cache-Control: no-store
+GET {{baseUrl}}/auth/me
+Cookie: {{login_passenger.response.headers.set-cookie}}
+
+### 10. Verify idempotency (call multiple times)
+GET {{baseUrl}}/auth/me
+Cookie: {{login_passenger.response.headers.set-cookie}}
+
+###
+GET {{baseUrl}}/auth/me
+Cookie: {{login_passenger.response.headers.set-cookie}}
+
+###
+GET {{baseUrl}}/auth/me
+Cookie: {{login_passenger.response.headers.set-cookie}}
+
+### 11. LOGOUT and try to access /auth/me
+# @name logout
+POST {{baseUrl}}/auth/logout
+Cookie: {{login_passenger.response.headers.set-cookie}}
+
+###
+GET {{baseUrl}}/auth/me
+Cookie: {{login_passenger.response.headers.set-cookie}}
+# Should return 401 (session cleared)

@@ -1,0 +1,3002 @@
+openapi: 3.0.3
+info:
+  title: Wheels-Unisabana API
+  version: 1.0.0
+  description: API para el sistema de carpooling de la Universidad de La Sabana
+  contact:
+    name: Wheels-Unisabana Team
+    email: support@wheels-unisabana.edu.co
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+servers:
+  - url: http://localhost:3000
+    description: Development server
+tags:
+  - name: System
+    description: Endpoints del sistema
+  - name: Users
+    description: Gestión de usuarios
+  - name: Vehicles
+    description: Gestión de vehículos (drivers)
+  - name: Authentication
+    description: Autenticación y sesiones
+  - name: Trip Offers
+    description: Gestión de ofertas de viajes (drivers)
+  - name: Passenger Trips
+    description: Búsqueda y reserva de viajes (passengers)
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: access_token
+      description: JWT stored in httpOnly cookie
+  schemas:
+    ErrorValidation:
+      type: object
+      properties:
+        code:
+          type: string
+          example: invalid_schema
+        message:
+          type: string
+          example: Validation failed
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: firstName
+              issue:
+                type: string
+                example: min length 2
+        correlationId:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+    ErrorConflict:
+      type: object
+      properties:
+        code:
+          type: string
+          example: duplicate_email
+        message:
+          type: string
+          example: corporateEmail already exists
+        correlationId:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+    ErrorUnauthorized:
+      type: object
+      properties:
+        code:
+          type: string
+          example: unauthorized
+        message:
+          type: string
+          example: Missing or invalid session
+        correlationId:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+    ErrorForbidden:
+      type: object
+      properties:
+        code:
+          type: string
+          example: immutable_field
+        message:
+          type: string
+          example: One or more fields cannot be updated
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: corporateEmail
+              issue:
+                type: string
+                example: immutable
+        correlationId:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+    ErrorPayloadTooLarge:
+      type: object
+      properties:
+        code:
+          type: string
+          example: payload_too_large
+        message:
+          type: string
+          example: File exceeds limit
+        correlationId:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+    UserResponseDto:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 665e2a...f1
+        role:
+          type: string
+          enum:
+            - passenger
+            - driver
+          example: passenger
+        firstName:
+          type: string
+          example: Ana
+        lastName:
+          type: string
+          example: Ruiz
+        universityId:
+          type: string
+          example: '202420023'
+        corporateEmail:
+          type: string
+          format: email
+          example: aruiz@unisabana.edu.co
+        phone:
+          type: string
+          example: '+573001112233'
+        profilePhotoUrl:
+          type: string
+          nullable: true
+          example: https://cdn.example/u/665e2a/avatar.jpg
+        driver:
+          type: object
+          nullable: true
+          properties:
+            hasVehicle:
+              type: boolean
+              example: false
+          description: Only present for role=driver
+    UpdateProfileRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+          minLength: 2
+          maxLength: 50
+          example: Ana María
+        lastName:
+          type: string
+          minLength: 2
+          maxLength: 50
+          example: Ruiz García
+        phone:
+          type: string
+          pattern: ^\+[1-9]\d{1,14}$
+          example: '+573001112233'
+      description: At least one field required
+    TripOfferResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 66a1b2c3d4e5f6a7b8c9d0e1
+        driverId:
+          type: string
+          example: 665e2af1b2c3d4e5f6a7b8c9
+        vehicleId:
+          type: string
+          example: 6680a1b2c3d4e5f6a7b8c9d0
+        origin:
+          type: object
+          properties:
+            text:
+              type: string
+              example: Campus Norte
+            geo:
+              type: object
+              properties:
+                lat:
+                  type: number
+                  example: 4.703
+                lng:
+                  type: number
+                  example: -74.041
+        destination:
+          type: object
+          properties:
+            text:
+              type: string
+              example: Campus Sur
+            geo:
+              type: object
+              properties:
+                lat:
+                  type: number
+                  example: 4.627
+                lng:
+                  type: number
+                  example: -74.064
+        departureAt:
+          type: string
+          format: date-time
+          example: '2025-11-01T07:30:00.000Z'
+        estimatedArrivalAt:
+          type: string
+          format: date-time
+          example: '2025-11-01T08:10:00.000Z'
+        pricePerSeat:
+          type: number
+          example: 6000
+        totalSeats:
+          type: integer
+          example: 3
+        status:
+          type: string
+          enum:
+            - draft
+            - published
+            - canceled
+            - completed
+          example: published
+        notes:
+          type: string
+          example: Two backpacks max.
+        createdAt:
+          type: string
+          format: date-time
+          example: '2025-10-22T10:00:00.000Z'
+        updatedAt:
+          type: string
+          format: date-time
+          example: '2025-10-22T10:00:00.000Z'
+    BookingDecision:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 66a1b2c3d4e5f6a7b8c9d0e1
+        tripId:
+          type: string
+          example: 66a1b2c3d4e5f6a7b8c9d0e1
+        passengerId:
+          type: string
+          example: 665e2af1b2c3d4e5f6a7b8c9
+        status:
+          type: string
+          enum:
+            - accepted
+            - declined
+          example: accepted
+        decidedAt:
+          type: string
+          format: date-time
+          example: '2025-10-23T05:00:00.000Z'
+    CapacitySnapshot:
+      type: object
+      properties:
+        totalSeats:
+          type: integer
+          example: 3
+        allocatedSeats:
+          type: integer
+          example: 2
+        remainingSeats:
+          type: integer
+          example: 1
+  responses:
+    BookingAccepted:
+      description: Booking accepted successfully
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/BookingDecision'
+    CapacitySnapshot:
+      description: Capacity snapshot retrieved
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CapacitySnapshot'
+    ErrorForbiddenOwner:
+      description: Forbidden - Trip not owned by driver
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              code:
+                type: string
+                example: forbidden_owner
+              message:
+                type: string
+                example: Trip does not belong to the driver
+              correlationId:
+                type: string
+                example: 123e4567-e89b-12d3-a456-426614174000
+    ErrorCapacityOrState:
+      description: Conflict - capacity exceeded or invalid booking/trip state
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              code:
+                type: string
+                enum:
+                  - capacity_exceeded
+                  - invalid_state
+                  - invalid_trip_state
+              message:
+                type: string
+              correlationId:
+                type: string
+                example: 123e4567-e89b-12d3-a456-426614174000
+          examples:
+            capacity:
+              value:
+                code: capacity_exceeded
+                message: No seats remaining for this trip
+            invalidState:
+              value:
+                code: invalid_state
+                message: Booking request cannot be accepted in its current state
+            invalidTrip:
+              value:
+                code: invalid_trip_state
+                message: Trip cannot accept new bookings
+    ErrorInvalidSchema:
+      description: Bad Request - invalid_schema
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorValidation'
+paths:
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login (session creation)
+      description: |
+        Authenticates user and sets httpOnly cookie with JWT.
+
+        **Security**:
+        - Rate limited (5 attempts/min/IP)
+        - Generic error messages (no user enumeration)
+        - HttpOnly cookie (XSS protection)
+        - Secure flag in production
+        - SameSite cookie (CSRF protection)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - corporateEmail
+                - password
+              properties:
+                corporateEmail:
+                  type: string
+                  format: email
+                  example: jdoe@unisabana.edu.co
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+                  example: YourPassword123!
+            examples:
+              passenger:
+                summary: Passenger login
+                value:
+                  corporateEmail: passenger@unisabana.edu.co
+                  password: SecurePass123!
+              driver:
+                summary: Driver login
+                value:
+                  corporateEmail: driver@unisabana.edu.co
+                  password: SecurePass123!
+      responses:
+        '200':
+          description: Login successful, session cookie set
+          headers:
+            Set-Cookie:
+              description: JWT access token
+              schema:
+                type: string
+                example: access_token=eyJ...; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=7200
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    example: 665e2a...f1
+                  role:
+                    type: string
+                    enum:
+                      - passenger
+                      - driver
+                    example: driver
+                  firstName:
+                    type: string
+                    example: John
+                  lastName:
+                    type: string
+                    example: Doe
+              examples:
+                success:
+                  summary: Successful login
+                  value:
+                    id: 665e2a...f1
+                    role: driver
+                    firstName: John
+                    lastName: Doe
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorValidation'
+              example:
+                code: invalid_schema
+                message: Validation failed
+                details:
+                  - field: corporateEmail
+                    issue: corporateEmail must be a valid email address
+                correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: invalid_credentials
+                  message:
+                    type: string
+                    example: Email or password is incorrect
+                  correlationId:
+                    type: string
+              example:
+                code: invalid_credentials
+                message: Email or password is incorrect
+                correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '429':
+          description: Too many login attempts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: too_many_attempts
+                  message:
+                    type: string
+                    example: Too many login attempts, try again later
+              example:
+                code: too_many_attempts
+                message: Too many login attempts, try again later
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: User logout (session destruction)
+      description: |
+        Clears the httpOnly cookie to revoke the session.
+
+        **Idempotent**: Can be called with or without authentication.
+
+        **Cookie Removal**: Sets access_token cookie with Max-Age=0 and matching attributes.
+      responses:
+        '200':
+          description: Logout successful, cookie cleared
+          headers:
+            Set-Cookie:
+              description: Clear access_token cookie
+              schema:
+                type: string
+                example: access_token=; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=0
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+              example:
+                ok: true
+  /auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get current user session/identity
+      description: |
+        Returns minimal user identity for session verification.
+
+        **Protected**: Requires valid JWT cookie (set by /auth/login).
+
+        **Security**:
+        - No secrets or internal fields exposed
+        - Cache-Control: no-store (never cache)
+        - PII redaction in logs
+        - Correlation ID for observability
+
+        **Use case**: Client renders protected UI without re-login
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Current user identity
+          headers:
+            Cache-Control:
+              description: Prevent caching of sensitive data
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    example: 665e2a...f1
+                  role:
+                    type: string
+                    enum:
+                      - passenger
+                      - driver
+                    example: driver
+                  firstName:
+                    type: string
+                    example: John
+                  lastName:
+                    type: string
+                    example: Doe
+                  driver:
+                    type: object
+                    description: Only present for drivers
+                    properties:
+                      hasVehicle:
+                        type: boolean
+                        example: true
+              examples:
+                driver_with_vehicle:
+                  summary: Driver with vehicle
+                  value:
+                    id: 665e2a...f1
+                    role: driver
+                    firstName: John
+                    lastName: Doe
+                    driver:
+                      hasVehicle: true
+                driver_without_vehicle:
+                  summary: Driver without vehicle
+                  value:
+                    id: 665e2a...f2
+                    role: driver
+                    firstName: Jane
+                    lastName: Smith
+                    driver:
+                      hasVehicle: false
+                passenger:
+                  summary: Passenger
+                  value:
+                    id: 665e2a...f3
+                    role: passenger
+                    firstName: Alice
+                    lastName: Johnson
+        '401':
+          description: Missing or invalid session
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: unauthorized
+                  message:
+                    type: string
+                    example: Missing or invalid session
+                  correlationId:
+                    type: string
+              example:
+                code: unauthorized
+                message: Missing or invalid session
+                correlationId: 123e4567-e89b-12d3-a456-426614174000
+  /auth/password/reset-request:
+    post:
+      tags:
+        - Authentication
+      summary: Request password reset
+      description: |
+        Initiates a password reset process for a user (out-of-session).
+
+        **Security**:
+        - Generic 200 response (never reveals if email exists)
+        - Rate limited (3 requests per 15 min per IP)
+        - PII redaction in logs (email never logged)
+        - Cryptographically secure token (32 bytes random)
+        - Token expires in 15 minutes
+        - One-time use token (consumed after reset)
+
+        **Flow**:
+        1. User provides email
+        2. If account exists: token generated and sent via email
+        3. If account doesn't exist: generic success (no enumeration)
+        4. User receives email with reset link (MVP: check server logs)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - corporateEmail
+              properties:
+                corporateEmail:
+                  type: string
+                  format: email
+                  example: jdoe@unisabana.edu.co
+            examples:
+              request:
+                summary: Password reset request
+                value:
+                  corporateEmail: jdoe@unisabana.edu.co
+      responses:
+        '200':
+          description: |
+            Generic success response (always returned).
+
+            Note: Response is intentionally generic to prevent user enumeration.
+            If the email exists, a reset token is generated and sent.
+            If the email doesn't exist, the same response is returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+              example:
+                ok: true
+        '400':
+          description: Validation error (invalid email format)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorValidation'
+              example:
+                code: invalid_schema
+                message: Validation failed
+                details:
+                  - field: corporateEmail
+                    issue: corporateEmail must be a valid email address
+                correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: too_many_attempts
+                  message:
+                    type: string
+                    example: Please try again later
+              example:
+                code: too_many_attempts
+                message: Please try again later
+  /auth/password/reset:
+    post:
+      tags:
+        - Authentication
+      summary: Reset password using token (out-of-session)
+      description: |
+        Redeems a password reset token to set a new password.
+
+        **Token Validation**:
+        - Token is hashed (SHA-256) before lookup
+        - Checked against database hash (constant-time comparison)
+        - Must not be expired (15-minute window)
+        - Must not be already consumed (one-time use)
+
+        **Password Requirements**:
+        - Minimum 8 characters
+        - At least one uppercase letter
+        - At least one lowercase letter
+        - At least one number
+        - At least one special character (@$!%*?&)
+
+        **Security**:
+        - New password is hashed with bcrypt before storage
+        - Token is marked as consumed (one-time use)
+        - passwordChangedAt timestamp is updated
+        - All operations are logged without sensitive data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+                - newPassword
+              properties:
+                token:
+                  type: string
+                  description: Base64url-encoded token from reset email
+                  pattern: ^[A-Za-z0-9_-]+$
+                  minLength: 43
+                  example: abc123XYZ-_token_from_email_url
+                newPassword:
+                  type: string
+                  format: password
+                  minLength: 8
+                  maxLength: 128
+                  description: Strong password meeting complexity requirements
+                  example: NewSecurePass123!
+            examples:
+              valid:
+                summary: Valid reset request
+                value:
+                  token: k7n3R9xZ2pQ8vM5wL1jT4hG6fD0sA9cB2eN8uY7iO3qW5rT1xK4mP6vL2jH9gF0
+                  newPassword: NewSecurePass123!
+      responses:
+        '200':
+          description: Password reset successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+              example:
+                ok: true
+        '400':
+          description: Invalid token or validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    enum:
+                      - invalid_schema
+                      - invalid_token
+                  message:
+                    type: string
+                  correlationId:
+                    type: string
+              examples:
+                invalid_token:
+                  summary: Invalid or not found token
+                  value:
+                    code: invalid_token
+                    message: The reset link is invalid
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                invalid_schema:
+                  summary: Validation error
+                  value:
+                    code: invalid_schema
+                    message: Validation failed
+                    details:
+                      - field: newPassword
+                        issue: newPassword must contain at least one uppercase letter, one lowercase letter, one number, and one special character
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '409':
+          description: Token already used
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: token_used
+                  message:
+                    type: string
+                    example: The reset link has already been used
+                  correlationId:
+                    type: string
+              example:
+                code: token_used
+                message: The reset link has already been used
+                correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '410':
+          description: Token expired
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: token_expired
+                  message:
+                    type: string
+                    example: The reset link has expired
+                  correlationId:
+                    type: string
+              example:
+                code: token_expired
+                message: The reset link has expired
+                correlationId: 123e4567-e89b-12d3-a456-426614174000
+  /auth/password:
+    patch:
+      tags:
+        - Authentication
+      summary: Change password (in-session, authenticated)
+      description: |
+        Allows authenticated users to change their password by providing
+        current password and a new strong password.
+
+        **Authentication Required**: Must have valid JWT cookie from /auth/login
+
+        **Password Verification**:
+        - Current password verified with bcrypt (timing-safe)
+        - If current password wrong → 401 invalid_credentials
+
+        **New Password Requirements**:
+        - Minimum 8 characters
+        - At least one uppercase letter
+        - At least one lowercase letter
+        - At least one number
+        - At least one special character (@$!%*?&)
+
+        **Security**:
+        - New password hashed with bcrypt before storage
+        - passwordChangedAt timestamp updated
+        - All operations logged without passwords
+        - Session remains valid after password change
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - currentPassword
+                - newPassword
+              properties:
+                currentPassword:
+                  type: string
+                  format: password
+                  description: Current password for verification
+                  example: OldSecret123
+                newPassword:
+                  type: string
+                  format: password
+                  minLength: 8
+                  maxLength: 128
+                  description: New strong password meeting complexity requirements
+                  example: CorrectHorseBatteryStaple!
+            examples:
+              valid:
+                summary: Valid password change
+                value:
+                  currentPassword: OldSecret123
+                  newPassword: NewSecurePass123!
+      responses:
+        '200':
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+              example:
+                ok: true
+        '400':
+          description: Validation error (weak new password)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorValidation'
+              example:
+                code: invalid_schema
+                message: Validation failed
+                details:
+                  - field: newPassword
+                    issue: newPassword must contain at least one uppercase letter, one lowercase letter, one number, and one special character
+                correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '401':
+          description: Authentication failed or current password incorrect
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    enum:
+                      - unauthorized
+                      - invalid_credentials
+                  message:
+                    type: string
+                  correlationId:
+                    type: string
+              examples:
+                invalid_credentials:
+                  summary: Wrong current password
+                  value:
+                    code: invalid_credentials
+                    message: Email or password is incorrect
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                unauthorized:
+                  summary: Not authenticated
+                  value:
+                    code: unauthorized
+                    message: Authentication required
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+  /drivers/trips/{tripId}/booking-requests:
+    get:
+      tags:
+        - Trip Offers
+      summary: List booking requests for my trip (Driver)
+      description: |
+        Returns booking requests for a trip owned by the authenticated driver.
+        Supports filtering by status and pagination.
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: tripId
+          required: true
+          schema:
+            type: string
+            pattern: ^[a-f\d]{24}$
+          description: Trip ID (must belong to the authenticated driver)
+        - in: query
+          name: status
+          required: false
+          schema:
+            oneOf:
+              - type: string
+                enum:
+                  - pending
+                  - accepted
+                  - declined
+                  - canceled_by_passenger
+                  - expired
+              - type: array
+                items:
+                  type: string
+                  enum:
+                    - pending
+                    - accepted
+                    - declined
+                    - canceled_by_passenger
+                    - expired
+          description: Filter by one or more statuses
+        - in: query
+          name: page
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: pageSize
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        '200':
+          description: Booking requests retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          example: 66a1b2c3d4e5f6a7b8c9d0e1
+                        tripId:
+                          type: string
+                          example: 66a1b2c3d4e5f6a7b8c9d0e1
+                        passengerId:
+                          type: string
+                          example: 665e2af1b2c3d4e5f6a7b8c9
+                        status:
+                          type: string
+                          enum:
+                            - pending
+                            - accepted
+                            - declined
+                            - canceled_by_passenger
+                            - expired
+                          example: pending
+                        seats:
+                          type: integer
+                          example: 1
+                        note:
+                          type: string
+                          nullable: true
+                          example: Window seat please
+                        acceptedAt:
+                          type: string
+                          format: date-time
+                          nullable: true
+                        declinedAt:
+                          type: string
+                          format: date-time
+                          nullable: true
+                        canceledAt:
+                          type: string
+                          format: date-time
+                          nullable: true
+                        createdAt:
+                          type: string
+                          format: date-time
+                  page:
+                    type: integer
+                    example: 1
+                  pageSize:
+                    type: integer
+                    example: 10
+                  total:
+                    type: integer
+                    example: 3
+                  totalPages:
+                    type: integer
+                    example: 1
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorUnauthorized'
+        '403':
+          description: Trip not owned by driver
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: forbidden_owner
+                  message:
+                    type: string
+                    example: Trip does not belong to the driver
+        '404':
+          description: Trip not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: trip_not_found
+                  message:
+                    type: string
+                    example: Trip offer not found
+  /drivers/trips/{tripId}/capacity:
+    get:
+      tags:
+        - Trip Offers
+      summary: Capacity snapshot for my trip (Driver)
+      description: |
+        Returns current capacity numbers for a driver's trip. Owner-only.
+        Response includes `totalSeats`, `allocatedSeats` (from Seat Ledger), and `remainingSeats`.
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: tripId
+          required: true
+          schema:
+            type: string
+            pattern: ^[a-f\d]{24}$
+          description: Trip ID (must belong to the authenticated driver)
+      responses:
+        '200':
+          $ref: '#/components/responses/CapacitySnapshot'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorUnauthorized'
+        '403':
+          $ref: '#/components/responses/ErrorForbiddenOwner'
+        '404':
+          description: Trip not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: trip_not_found
+                  message:
+                    type: string
+                    example: Trip offer not found
+  /drivers/booking-requests/{bookingId}/accept:
+    post:
+      tags:
+        - Trip Offers
+      summary: Accept a booking request (Driver)
+      description: |
+        Accepts a pending booking request. Seats are allocated atomically.
+        Requires driver to own the trip. Protected by CSRF (cookie + header) and JWT cookie.
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: bookingId
+          required: true
+          schema:
+            type: string
+            pattern: ^[a-f\d]{24}$
+      responses:
+        '200':
+          $ref: '#/components/responses/BookingAccepted'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorUnauthorized'
+        '403':
+          $ref: '#/components/responses/ErrorForbiddenOwner'
+        '404':
+          description: Booking or trip not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: booking_not_found
+                  message:
+                    type: string
+                    example: Booking request not found
+        '409':
+          $ref: '#/components/responses/ErrorCapacityOrState'
+  /drivers/booking-requests/{bookingId}/decline:
+    post:
+      tags:
+        - Trip Offers
+      summary: Decline a booking request (Driver)
+      description: |
+        Declines a pending booking request. Operation is idempotent: already declined returns 200.
+        Requires driver to own the trip. Protected by CSRF (cookie + header) and JWT cookie.
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: bookingId
+          required: true
+          schema:
+            type: string
+            pattern: ^[a-f\d]{24}$
+      responses:
+        '200':
+          description: Booking declined (or already declined)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    example: 66a1b2c3d4e5f6a7b8c9d0e1
+                  tripId:
+                    type: string
+                    example: 66a1b2c3d4e5f6a7b8c9d0e1
+                  passengerId:
+                    type: string
+                    example: 665e2af1b2c3d4e5f6a7b8c9
+                  status:
+                    type: string
+                    example: declined
+                  decidedAt:
+                    type: string
+                    format: date-time
+                    example: '2025-10-23T05:00:00.000Z'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorUnauthorized'
+        '403':
+          description: Trip not owned by driver
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: forbidden_owner
+                  message:
+                    type: string
+                    example: Trip does not belong to the driver
+        '404':
+          description: Booking or trip not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: booking_not_found
+                  message:
+                    type: string
+                    example: Booking request not found
+        '409':
+          description: Conflict - invalid state (e.g., already accepted)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: invalid_state
+                  message:
+                    type: string
+                    example: Booking request cannot be declined in its current state
+  /passengers/trips/search:
+    get:
+      tags:
+        - Passenger Trips
+      summary: Search published trips (Passenger only)
+      description: |
+        Search for available published trips with future departure.
+
+        **Authorization**: Requires valid JWT cookie (any authenticated user, but intended for passengers).
+
+        **Filters**:
+        - `qOrigin`: Text search in origin (case-insensitive, partial match)
+        - `qDestination`: Text search in destination (case-insensitive, partial match)
+        - `fromDate`: Minimum departure date (ISO 8601)
+        - `toDate`: Maximum departure date (ISO 8601)
+        - `page`: Page number (default: 1, min: 1)
+        - `pageSize`: Results per page (default: 10, min: 1, max: 50)
+
+        **Business Rules**:
+        - Only returns trips with `status='published'`
+        - Only returns trips with `departureAt > now` (future trips)
+        - Results sorted by `departureAt` ascending (soonest first)
+
+        **Security**:
+        - Text inputs are sanitized (regex special chars escaped)
+        - No driver PII exposed (only public trip fields)
+
+        **Performance**:
+        - Indexed queries on status and departureAt
+        - Pagination enforced (max 50 results per page)
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: qOrigin
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+          description: Text search in origin (case-insensitive)
+          example: Campus
+        - in: query
+          name: qDestination
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+          description: Text search in destination (case-insensitive)
+          example: Centro
+        - in: query
+          name: fromDate
+          schema:
+            type: string
+            format: date-time
+          description: Minimum departure date (ISO 8601)
+          example: '2025-11-01T00:00:00.000Z'
+        - in: query
+          name: toDate
+          schema:
+            type: string
+            format: date-time
+          description: Maximum departure date (ISO 8601)
+          example: '2025-11-30T23:59:59.999Z'
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number
+          example: 1
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+          description: Results per page
+          example: 10
+      responses:
+        '200':
+          description: Search results with pagination
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TripOfferResponse'
+                  page:
+                    type: integer
+                    example: 1
+                  pageSize:
+                    type: integer
+                    example: 10
+                  total:
+                    type: integer
+                    example: 25
+                  totalPages:
+                    type: integer
+                    example: 3
+              examples:
+                success:
+                  summary: Search results with trips
+                  value:
+                    items:
+                      - id: 66a1b2c3d4e5f6a7b8c9d0e1
+                        driverId: 665e2af1b2c3d4e5f6a7b8c9
+                        vehicleId: 6680a1b2c3d4e5f6a7b8c9d0
+                        origin:
+                          text: Campus Norte
+                          geo:
+                            lat: 4.703
+                            lng: -74.041
+                        destination:
+                          text: Centro
+                          geo:
+                            lat: 4.652
+                            lng: -74.093
+                        departureAt: '2025-11-01T07:30:00.000Z'
+                        estimatedArrivalAt: '2025-11-01T08:10:00.000Z'
+                        pricePerSeat: 6000
+                        totalSeats: 3
+                        status: published
+                        notes: Two backpacks max.
+                        createdAt: '2025-10-22T10:00:00.000Z'
+                        updatedAt: '2025-10-22T10:00:00.000Z'
+                    page: 1
+                    pageSize: 10
+                    total: 1
+                    totalPages: 1
+                empty:
+                  summary: No trips found
+                  value:
+                    items: []
+                    page: 1
+                    pageSize: 10
+                    total: 0
+                    totalPages: 0
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorValidation'
+              examples:
+                invalid_page:
+                  summary: Invalid page number
+                  value:
+                    code: invalid_schema
+                    message: Validation failed
+                    details:
+                      - page must be at least 1
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                invalid_date_range:
+                  summary: toDate before fromDate
+                  value:
+                    code: invalid_schema
+                    message: Validation failed
+                    details:
+                      - toDate must be after fromDate
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                exceeds_pageSize:
+                  summary: pageSize exceeds maximum
+                  value:
+                    code: invalid_schema
+                    message: Validation failed
+                    details:
+                      - pageSize must not exceed 50
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorUnauthorized'
+  /passengers/bookings:
+    post:
+      tags:
+        - Passenger Trips
+      summary: Create a booking request (Passenger only)
+      description: |
+        Submit a booking request for a published trip with future departure.
+
+        **Authorization**: Requires role='passenger' and valid JWT cookie.
+        **CSRF Protection**: Required for state-changing operations.
+
+        **Business Rules**:
+        - Trip must exist and have `status='published'`
+        - Trip `departureAt` must be in the future
+        - Passenger cannot have another active (pending) request for the same trip
+        - Note is optional and must be ≤ 300 characters
+        - Request starts with `status='pending'`
+
+        **Future**: Accept/decline flow and capacity enforcement will be added in later stories.
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tripId
+              properties:
+                tripId:
+                  type: string
+                  pattern: ^[a-f\d]{24}$
+                  description: Trip offer ID (MongoDB ObjectId)
+                  example: 66a1b2c3d4e5f6a7b8c9d0e1
+                note:
+                  type: string
+                  maxLength: 300
+                  description: Optional note for the driver
+                  example: I have a small bag.
+                seats:
+                  type: integer
+                  minimum: 1
+                  default: 1
+                  description: Number of seats requested
+                  example: 1
+            examples:
+              with_note:
+                summary: Request with note
+                value:
+                  tripId: 66a1b2c3d4e5f6a7b8c9d0e1
+                  note: I have a small bag.
+              minimal:
+                summary: Minimal request
+                value:
+                  tripId: 66a1b2c3d4e5f6a7b8c9d0e1
+      responses:
+        '201':
+          description: Booking request created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    description: Booking request ID
+                    example: 66b1c2d3e4f5a6b7c8d9e0f1
+                  tripId:
+                    type: string
+                    description: Trip offer ID
+                    example: 66a1b2c3d4e5f6a7b8c9d0e1
+                  passengerId:
+                    type: string
+                    description: Passenger user ID
+                    example: 665e2af1b2c3d4e5f6a7b8c9
+                  status:
+                    type: string
+                    enum:
+                      - pending
+                    description: Request status (always 'pending' on creation)
+                    example: pending
+                  note:
+                    type: string
+                    description: Optional note from passenger
+                    example: I have a small bag.
+                  seats:
+                    type: integer
+                    description: Number of seats requested
+                    example: 1
+                  createdAt:
+                    type: string
+                    format: date-time
+                    description: Request creation timestamp
+                    example: '2025-10-23T01:15:00.000Z'
+              example:
+                id: 66b1c2d3e4f5a6b7c8d9e0f1
+                tripId: 66a1b2c3d4e5f6a7b8c9d0e1
+                passengerId: 665e2af1b2c3d4e5f6a7b8c9
+                status: pending
+                note: I have a small bag.
+                seats: 1
+                createdAt: '2025-10-23T01:15:00.000Z'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorValidation'
+              examples:
+                missing_tripId:
+                  summary: Missing tripId
+                  value:
+                    code: invalid_schema
+                    message: Validation failed
+                    details:
+                      - field: tripId
+                        issue: tripId is required
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                invalid_tripId:
+                  summary: Invalid tripId format
+                  value:
+                    code: invalid_schema
+                    message: Validation failed
+                    details:
+                      - field: tripId
+                        issue: tripId must be a valid MongoDB ObjectId
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                note_too_long:
+                  summary: Note exceeds 300 characters
+                  value:
+                    code: invalid_schema
+                    message: Validation failed
+                    details:
+                      - field: note
+                        issue: note must not exceed 300 characters
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorUnauthorized'
+        '403':
+          description: Forbidden (not a passenger or CSRF token missing)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorForbidden'
+              examples:
+                forbidden_role:
+                  summary: Only passengers can create booking requests
+                  value:
+                    code: forbidden_role
+                    message: Only passengers can create booking requests
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                csrf_missing:
+                  summary: CSRF token missing or invalid
+                  value:
+                    code: csrf_mismatch
+                    message: CSRF token missing or invalid
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '404':
+          description: Trip not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: trip_not_found
+                  message:
+                    type: string
+                    example: Trip offer not found
+                  correlationId:
+                    type: string
+        '409':
+          description: Conflict (duplicate request or invalid trip state)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  correlationId:
+                    type: string
+              examples:
+                duplicate_request:
+                  summary: Passenger already has a pending request for this trip
+                  value:
+                    code: duplicate_request
+                    message: You already have a pending request for this trip
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                invalid_trip_state:
+                  summary: Trip is not published or already departed
+                  value:
+                    code: invalid_trip_state
+                    message: Trip is not published or already departed
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+    get:
+      tags:
+        - Passenger Trips
+      summary: List my booking requests (Passenger only)
+      description: |
+        List the caller's booking requests with optional filters and pagination.
+
+        **Authorization**: Requires role='passenger' and valid JWT cookie.
+
+        **Filters**:
+        - `status`: Filter by status (single or multiple)
+        - `fromDate`: Minimum createdAt date (ISO 8601)
+        - `toDate`: Maximum createdAt date (ISO 8601)
+        - `page`: Page number (default: 1, min: 1)
+        - `pageSize`: Results per page (default: 10, min: 1, max: 50)
+
+        **Business Rules**:
+        - Returns only the caller's booking requests (owner-only)
+        - Results sorted by `createdAt` desc (most recent first)
+        - Pagination enforced (max 50 results per page)
+
+        **Security**:
+        - No access to other passengers' requests
+        - Full DTO with trip details not populated (use GET /trips/:id separately)
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            oneOf:
+              - type: string
+                enum:
+                  - pending
+                  - canceled_by_passenger
+                  - accepted
+                  - declined
+                  - expired
+              - type: array
+                items:
+                  type: string
+                  enum:
+                    - pending
+                    - canceled_by_passenger
+                    - accepted
+                    - declined
+                    - expired
+          description: Filter by status (single or array)
+          example: pending
+        - in: query
+          name: fromDate
+          schema:
+            type: string
+            format: date-time
+          description: Minimum createdAt date (ISO 8601)
+          example: '2025-10-01T00:00:00.000Z'
+        - in: query
+          name: toDate
+          schema:
+            type: string
+            format: date-time
+          description: Maximum createdAt date (ISO 8601)
+          example: '2025-10-31T23:59:59.999Z'
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number
+          example: 1
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+          description: Results per page
+          example: 10
+      responses:
+        '200':
+          description: List of booking requests with pagination
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        tripId:
+                          type: string
+                        passengerId:
+                          type: string
+                        status:
+                          type: string
+                          enum:
+                            - pending
+                            - canceled_by_passenger
+                            - accepted
+                            - declined
+                            - expired
+                        note:
+                          type: string
+                        seats:
+                          type: integer
+                        createdAt:
+                          type: string
+                          format: date-time
+                  page:
+                    type: integer
+                    example: 1
+                  pageSize:
+                    type: integer
+                    example: 10
+                  total:
+                    type: integer
+                    example: 7
+                  totalPages:
+                    type: integer
+                    example: 1
+              examples:
+                with_results:
+                  summary: List with results
+                  value:
+                    items:
+                      - id: 66b1c2d3e4f5a6b7c8d9e0f1
+                        tripId: 66a1b2c3d4e5f6a7b8c9d0e1
+                        passengerId: 665e2af1b2c3d4e5f6a7b8c9
+                        status: pending
+                        note: I have a small bag.
+                        seats: 1
+                        createdAt: '2025-10-23T01:15:00.000Z'
+                      - id: 66b1c2d3e4f5a6b7c8d9e0f2
+                        tripId: 66a1b2c3d4e5f6a7b8c9d0e2
+                        passengerId: 665e2af1b2c3d4e5f6a7b8c9
+                        status: accepted
+                        note: ''
+                        seats: 1
+                        createdAt: '2025-10-22T10:30:00.000Z'
+                    page: 1
+                    pageSize: 10
+                    total: 2
+                    totalPages: 1
+                empty:
+                  summary: Empty list
+                  value:
+                    items: []
+                    page: 1
+                    pageSize: 10
+                    total: 0
+                    totalPages: 0
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorValidation'
+              examples:
+                invalid_page:
+                  summary: Invalid page number
+                  value:
+                    code: invalid_schema
+                    message: Invalid query parameters
+                    details:
+                      - page must be at least 1
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                invalid_status:
+                  summary: Invalid status value
+                  value:
+                    code: invalid_schema
+                    message: Invalid query parameters
+                    details:
+                      - 'status must be one of: pending, canceled_by_passenger, accepted, declined, expired'
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                exceeds_pageSize:
+                  summary: pageSize exceeds maximum
+                  value:
+                    code: invalid_schema
+                    message: Invalid query parameters
+                    details:
+                      - pageSize must not exceed 50
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorUnauthorized'
+        '403':
+          description: Forbidden (not a passenger)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorForbidden'
+              example:
+                code: forbidden_role
+                message: Only passengers can list booking requests
+                correlationId: 123e4567-e89b-12d3-a456-426614174000
+  /passengers/bookings/{bookingId}:
+    delete:
+      tags:
+        - Passenger Trips
+      summary: Cancel my booking request (Passenger only, owner-only)
+      description: |
+        Cancel a booking request owned by the caller. Only pending requests can be canceled.
+
+        **Authorization**: Requires role='passenger', valid JWT cookie, and ownership.
+        **CSRF Protection**: Required for state-changing operations.
+
+        **Business Rules**:
+        - Only the request owner (passenger) can cancel
+        - Only `pending` status can be canceled → `canceled_by_passenger`
+        - **Idempotent**: If already `canceled_by_passenger`, returns 200 with status unchanged
+        - Future statuses (accepted, declined, expired) cannot be canceled → 409
+
+        **Status Transition**:
+        - `pending` → `canceled_by_passenger`: OK (200)
+        - `canceled_by_passenger` → `canceled_by_passenger`: OK (200, idempotent)
+        - `accepted`/`declined`/`expired` → ✗ 409 invalid_state
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: bookingId
+          required: true
+          schema:
+            type: string
+            pattern: ^[a-f\d]{24}$
+          description: Booking request ID (MongoDB ObjectId)
+          example: 66b1c2d3e4f5a6b7c8d9e0f1
+      responses:
+        '200':
+          description: Booking request canceled successfully (or already canceled - idempotent)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  tripId:
+                    type: string
+                  passengerId:
+                    type: string
+                  status:
+                    type: string
+                    enum:
+                      - canceled_by_passenger
+                  note:
+                    type: string
+                  seats:
+                    type: integer
+                  createdAt:
+                    type: string
+                    format: date-time
+              examples:
+                canceled:
+                  summary: Request successfully canceled
+                  value:
+                    id: 66b1c2d3e4f5a6b7c8d9e0f1
+                    tripId: 66a1b2c3d4e5f6a7b8c9d0e1
+                    passengerId: 665e2af1b2c3d4e5f6a7b8c9
+                    status: canceled_by_passenger
+                    note: I have a small bag.
+                    seats: 1
+                    createdAt: '2025-10-23T01:15:00.000Z'
+                already_canceled:
+                  summary: Already canceled (idempotent)
+                  value:
+                    id: 66b1c2d3e4f5a6b7c8d9e0f1
+                    status: canceled_by_passenger
+        '400':
+          description: Invalid bookingId format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorValidation'
+              example:
+                code: invalid_schema
+                message: Validation failed
+                details:
+                  - field: bookingId
+                    issue: bookingId must be a valid MongoDB ObjectId
+                correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorUnauthorized'
+        '403':
+          description: Forbidden (not owner, not a passenger, or CSRF token missing)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorForbidden'
+              examples:
+                not_owner:
+                  summary: Booking request does not belong to the caller
+                  value:
+                    code: forbidden_owner
+                    message: You do not own this booking request
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                forbidden_role:
+                  summary: Only passengers can cancel booking requests
+                  value:
+                    code: forbidden_role
+                    message: Only passengers can cancel booking requests
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                csrf_missing:
+                  summary: CSRF token missing or invalid
+                  value:
+                    code: csrf_mismatch
+                    message: CSRF token missing or invalid
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '404':
+          description: Booking request not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: not_found
+                  message:
+                    type: string
+                    example: Booking request not found
+                  correlationId:
+                    type: string
+        '409':
+          description: Conflict (cannot cancel in current state)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: invalid_state
+                  message:
+                    type: string
+                  correlationId:
+                    type: string
+              example:
+                code: invalid_state
+                message: 'Cannot cancel booking with status: accepted. Only pending bookings can be canceled.'
+                correlationId: 123e4567-e89b-12d3-a456-426614174000
+  /drivers/trips:
+    post:
+      tags:
+        - Trip Offers
+      summary: Create a new trip offer (Driver only)
+      description: |
+        Creates a new trip offer for the authenticated driver.
+
+        **Authorization**: Requires role='driver' and valid JWT cookie.
+
+        **Business Rules**:
+        - vehicleId must be owned by the driver
+        - departureAt must be in the future (for published trips)
+        - estimatedArrivalAt must be after departureAt
+        - totalSeats must be ≤ vehicle capacity
+        - Optional: rejects overlapping published trips (same driver, same time window)
+
+        **Status**:
+        - `draft`: Trip is not visible to passengers, can be published later
+        - `published`: Trip is visible to passengers and can receive bookings
+
+        **Structured Logging**:
+        - All requests logged with correlation ID
+        - PII (origin/destination text) redacted in logs
+        - Only status codes and trip IDs logged
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - vehicleId
+                - origin
+                - destination
+                - departureAt
+                - estimatedArrivalAt
+                - pricePerSeat
+                - totalSeats
+              properties:
+                vehicleId:
+                  type: string
+                  pattern: ^[a-f\d]{24}$
+                  example: 6680a1b2c3d4e5f6a7b8c9d0
+                origin:
+                  type: object
+                  required:
+                    - text
+                    - geo
+                  properties:
+                    text:
+                      type: string
+                      minLength: 2
+                      maxLength: 200
+                      example: Campus Norte - Universidad de La Sabana
+                    geo:
+                      type: object
+                      required:
+                        - lat
+                        - lng
+                      properties:
+                        lat:
+                          type: number
+                          minimum: -90
+                          maximum: 90
+                          example: 4.703
+                        lng:
+                          type: number
+                          minimum: -180
+                          maximum: 180
+                          example: -74.041
+                destination:
+                  type: object
+                  required:
+                    - text
+                    - geo
+                  properties:
+                    text:
+                      type: string
+                      minLength: 2
+                      maxLength: 200
+                      example: Campus Sur - Universidad de La Sabana
+                    geo:
+                      type: object
+                      required:
+                        - lat
+                        - lng
+                      properties:
+                        lat:
+                          type: number
+                          minimum: -90
+                          maximum: 90
+                          example: 4.627
+                        lng:
+                          type: number
+                          minimum: -180
+                          maximum: 180
+                          example: -74.064
+                departureAt:
+                  type: string
+                  format: date-time
+                  description: ISO 8601 datetime (must be in the future for published trips)
+                  example: '2025-11-01T07:30:00.000Z'
+                estimatedArrivalAt:
+                  type: string
+                  format: date-time
+                  description: ISO 8601 datetime (must be after departureAt)
+                  example: '2025-11-01T08:10:00.000Z'
+                pricePerSeat:
+                  type: number
+                  minimum: 0
+                  multipleOf: 0.01
+                  description: Price per seat (2 decimal places)
+                  example: 6000
+                totalSeats:
+                  type: integer
+                  minimum: 1
+                  description: Number of available seats (must be ≤ vehicle capacity)
+                  example: 3
+                status:
+                  type: string
+                  enum:
+                    - draft
+                    - published
+                  default: published
+                  description: Trip visibility status
+                  example: published
+                notes:
+                  type: string
+                  maxLength: 500
+                  description: Optional notes for passengers
+                  example: Two backpacks max. No pets allowed.
+            examples:
+              published:
+                summary: Published trip (visible to passengers)
+                value:
+                  vehicleId: 6680a1b2c3d4e5f6a7b8c9d0
+                  origin:
+                    text: Campus Norte - Universidad de La Sabana
+                    geo:
+                      lat: 4.703
+                      lng: -74.041
+                  destination:
+                    text: Campus Sur - Universidad de La Sabana
+                    geo:
+                      lat: 4.627
+                      lng: -74.064
+                  departureAt: '2025-11-01T07:30:00.000Z'
+                  estimatedArrivalAt: '2025-11-01T08:10:00.000Z'
+                  pricePerSeat: 6000
+                  totalSeats: 3
+                  status: published
+                  notes: Two backpacks max.
+              draft:
+                summary: Draft trip (not visible, can publish later)
+                value:
+                  vehicleId: 6680a1b2c3d4e5f6a7b8c9d0
+                  origin:
+                    text: Chía Centro
+                    geo:
+                      lat: 4.858
+                      lng: -74.059
+                  destination:
+                    text: Bogotá Centro
+                    geo:
+                      lat: 4.598
+                      lng: -74.076
+                  departureAt: '2025-11-05T14:00:00.000Z'
+                  estimatedArrivalAt: '2025-11-05T15:30:00.000Z'
+                  pricePerSeat: 8000
+                  totalSeats: 4
+                  status: draft
+                  notes: ''
+      responses:
+        '201':
+          description: Trip offer created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripOfferResponse'
+              example:
+                id: 66a1b2c3d4e5f6a7b8c9d0e1
+                driverId: 665e2af1b2c3d4e5f6a7b8c9
+                vehicleId: 6680a1b2c3d4e5f6a7b8c9d0
+                origin:
+                  text: Campus Norte - Universidad de La Sabana
+                  geo:
+                    lat: 4.703
+                    lng: -74.041
+                destination:
+                  text: Campus Sur - Universidad de La Sabana
+                  geo:
+                    lat: 4.627
+                    lng: -74.064
+                departureAt: '2025-11-01T07:30:00.000Z'
+                estimatedArrivalAt: '2025-11-01T08:10:00.000Z'
+                pricePerSeat: 6000
+                totalSeats: 3
+                status: published
+                notes: Two backpacks max.
+                createdAt: '2025-10-22T10:00:00.000Z'
+                updatedAt: '2025-10-22T10:00:00.000Z'
+        '400':
+          description: Invalid request (validation errors, time/capacity violations)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorValidation'
+              examples:
+                invalid_schema:
+                  summary: Validation error
+                  value:
+                    code: invalid_schema
+                    message: Validation failed
+                    details:
+                      - field: departureAt
+                        issue: departureAt must be a valid ISO 8601 date
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                departure_in_past:
+                  summary: Departure time in the past
+                  value:
+                    code: invalid_schema
+                    message: departureAt must be in the future
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                exceeds_capacity:
+                  summary: Total seats exceeds vehicle capacity
+                  value:
+                    code: invalid_schema
+                    message: totalSeats (5) exceeds vehicle capacity (4)
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorUnauthorized'
+        '403':
+          description: Forbidden (not a driver or vehicle ownership violation)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorForbidden'
+              examples:
+                not_driver:
+                  summary: User is not a driver
+                  value:
+                    code: forbidden
+                    message: Only drivers can create trip offers
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                forbidden_owner:
+                  summary: Vehicle does not belong to driver
+                  value:
+                    code: forbidden_owner
+                    message: Vehicle does not belong to the driver
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '409':
+          description: Conflict (overlapping trip)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: overlapping_trip
+                  message:
+                    type: string
+                    example: You have another published trip during this time window
+                  correlationId:
+                    type: string
+              example:
+                code: overlapping_trip
+                message: You have another published trip during this time window
+                correlationId: 123e4567-e89b-12d3-a456-426614174000
+    get:
+      tags:
+        - Trip Offers
+      summary: List my trip offers (Driver only)
+      description: |
+        Returns paginated list of trip offers for the authenticated driver.
+        Supports filtering by status, date range, and pagination.
+
+        **Authorization**: Requires role='driver' and valid JWT cookie.
+
+        **Filters**:
+        - `status`: Filter by one or multiple statuses (draft, published, canceled, completed)
+        - `fromDate`: Filter trips departing on or after this date
+        - `toDate`: Filter trips departing on or before this date
+
+        **Pagination**:
+        - `page`: Page number (1-based, default: 1)
+        - `pageSize`: Items per page (1-50, default: 10)
+
+        **Sorting**: Results sorted by `departureAt` descending (most recent first)
+
+        **Security**: Only returns trips owned by the authenticated driver
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            oneOf:
+              - type: string
+                enum:
+                  - draft
+                  - published
+                  - canceled
+                  - completed
+              - type: array
+                items:
+                  type: string
+                  enum:
+                    - draft
+                    - published
+                    - canceled
+                    - completed
+          description: Filter by trip status (can be multiple)
+          example: published
+        - in: query
+          name: fromDate
+          schema:
+            type: string
+            format: date-time
+          description: Filter trips departing on or after this date
+          example: '2025-10-01T00:00:00.000Z'
+        - in: query
+          name: toDate
+          schema:
+            type: string
+            format: date-time
+          description: Filter trips departing on or before this date
+          example: '2025-12-31T23:59:59.999Z'
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number (1-based)
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+          description: Number of items per page
+      responses:
+        '200':
+          description: List of trip offers with pagination metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TripOfferResponse'
+                  page:
+                    type: integer
+                    example: 1
+                  pageSize:
+                    type: integer
+                    example: 10
+                  total:
+                    type: integer
+                    example: 14
+                  totalPages:
+                    type: integer
+                    example: 2
+              examples:
+                with_items:
+                  summary: Response with items
+                  value:
+                    items:
+                      - id: 66a1b2c3d4e5f6a7b8c9d0e1
+                        driverId: 665e2af1b2c3d4e5f6a7b8c9
+                        vehicleId: 6680a1b2c3d4e5f6a7b8c9d0
+                        origin:
+                          text: Campus Norte
+                          geo:
+                            lat: 4.703
+                            lng: -74.041
+                        destination:
+                          text: Campus Sur
+                          geo:
+                            lat: 4.627
+                            lng: -74.064
+                        departureAt: '2025-11-01T07:30:00.000Z'
+                        estimatedArrivalAt: '2025-11-01T08:10:00.000Z'
+                        pricePerSeat: 6000
+                        totalSeats: 3
+                        status: published
+                        notes: Two backpacks max.
+                        createdAt: '2025-10-22T10:00:00.000Z'
+                        updatedAt: '2025-10-22T10:00:00.000Z'
+                    page: 1
+                    pageSize: 10
+                    total: 14
+                    totalPages: 2
+                empty:
+                  summary: No trips found
+                  value:
+                    items: []
+                    page: 1
+                    pageSize: 10
+                    total: 0
+                    totalPages: 0
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorValidation'
+              examples:
+                invalid_status:
+                  summary: Invalid status value
+                  value:
+                    code: invalid_schema
+                    message: Validation failed
+                    details:
+                      - field: status
+                        issue: 'status must be one of: draft, published, canceled, completed'
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                invalid_date:
+                  summary: Invalid date format
+                  value:
+                    code: invalid_schema
+                    message: Validation failed
+                    details:
+                      - field: fromDate
+                        issue: fromDate must be a valid ISO 8601 date
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                toDate_before_fromDate:
+                  summary: toDate before fromDate
+                  value:
+                    code: invalid_schema
+                    message: Validation failed
+                    details:
+                      - field: toDate
+                        issue: toDate must be after fromDate
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorUnauthorized'
+        '403':
+          description: Forbidden (not a driver)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorForbidden'
+  /drivers/trips/{id}:
+    patch:
+      tags:
+        - Trip Offers
+      summary: Update a trip offer (Driver only, owner-only)
+      description: |
+        Partial update of a trip offer. Only the owner driver can update their trips.
+
+        **Authorization**: Requires role='driver', valid JWT cookie, and ownership.
+        **CSRF Protection**: Required for state-changing operations.
+
+        **Allowed Fields**:
+        - `pricePerSeat`: Update price
+        - `totalSeats`: Update capacity (must be ≥ 1 and ≤ vehicle capacity)
+        - `notes`: Update trip notes
+        - `status`: Transition status (draft ↔ published, published → canceled)
+
+        **Business Rules**:
+        - Only draft trips can have times edited (if enabled in config)
+        - Cannot edit canceled or completed trips
+        - Status transitions must be legal
+        - totalSeats cannot be less than booked seats (future validation)
+        - All updates re-validate against vehicle capacity
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            pattern: ^[a-f\d]{24}$
+          description: Trip offer ID (MongoDB ObjectId)
+          example: 66a1b2c3d4e5f6a7b8c9d0e1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                pricePerSeat:
+                  type: number
+                  minimum: 0
+                  multipleOf: 0.01
+                  description: Price per seat
+                  example: 6500
+                totalSeats:
+                  type: integer
+                  minimum: 1
+                  description: Total seats (must be ≤ vehicle capacity)
+                  example: 4
+                notes:
+                  type: string
+                  maxLength: 500
+                  description: Trip notes
+                  example: Meet at Gate 3. Be punctual.
+                status:
+                  type: string
+                  enum:
+                    - draft
+                    - published
+                    - canceled
+                    - completed
+                  description: Trip status (legal transitions only)
+                  example: published
+            examples:
+              update_price:
+                summary: Update price and notes
+                value:
+                  pricePerSeat: 6500
+                  notes: Meet at Gate 3
+              publish_draft:
+                summary: Publish a draft trip
+                value:
+                  status: published
+              update_capacity:
+                summary: Update total seats
+                value:
+                  totalSeats: 4
+      responses:
+        '200':
+          description: Trip updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripOfferResponse'
+              example:
+                id: 66a1b2c3d4e5f6a7b8c9d0e1
+                driverId: 665e2af1b2c3d4e5f6a7b8c9
+                vehicleId: 6680a1b2c3d4e5f6a7b8c9d0
+                origin:
+                  text: Campus Norte
+                  geo:
+                    lat: 4.703
+                    lng: -74.041
+                destination:
+                  text: Campus Sur
+                  geo:
+                    lat: 4.627
+                    lng: -74.064
+                departureAt: '2025-11-01T07:30:00.000Z'
+                estimatedArrivalAt: '2025-11-01T08:10:00.000Z'
+                pricePerSeat: 6500
+                totalSeats: 3
+                status: published
+                notes: Meet at Gate 3
+                createdAt: '2025-10-22T10:00:00.000Z'
+                updatedAt: '2025-10-22T10:15:00.000Z'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorValidation'
+              examples:
+                invalid_price:
+                  summary: Invalid price
+                  value:
+                    code: invalid_schema
+                    message: Validation failed
+                    details:
+                      - field: pricePerSeat
+                        issue: pricePerSeat must be a positive number
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                exceeds_capacity:
+                  summary: Total seats exceeds vehicle capacity
+                  value:
+                    code: invalid_schema
+                    message: totalSeats (5) exceeds vehicle capacity (4)
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorUnauthorized'
+        '403':
+          description: Forbidden (not owner or not a driver)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorForbidden'
+              examples:
+                not_owner:
+                  summary: Trip does not belong to the driver
+                  value:
+                    code: forbidden_owner
+                    message: Trip does not belong to the driver
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '404':
+          description: Trip not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: trip_not_found
+                  message:
+                    type: string
+                    example: Trip offer not found
+                  correlationId:
+                    type: string
+        '409':
+          description: Conflict (invalid status transition or editing restriction)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: invalid_transition
+                  message:
+                    type: string
+                  correlationId:
+                    type: string
+              examples:
+                invalid_transition:
+                  summary: Invalid status transition
+                  value:
+                    code: invalid_transition
+                    message: Cannot transition from canceled to published
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                cannot_edit_published_time:
+                  summary: Cannot edit times on published trip
+                  value:
+                    code: invalid_transition
+                    message: Cannot edit departureAt for a published trip
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+    delete:
+      tags:
+        - Trip Offers
+      summary: Cancel a trip offer (Driver only, owner-only)
+      description: |
+        Soft-cancel a trip by changing status to `canceled`. Only the owner driver can cancel their trips.
+
+        **Authorization**: Requires role='driver', valid JWT cookie, and ownership.
+        **CSRF Protection**: Required for state-changing operations.
+
+        **Business Rules**:
+        - Can cancel trips with status `published` or `draft`
+        - Cannot cancel `completed` trips (409 invalid_transition)
+        - **Idempotent**: Repeated cancels return 200 with status=canceled
+
+        **Future**: Passenger notifications & refund logic will be added in booking story.
+
+        **Status Transition**:
+        - `published` → `canceled`: OK
+        - `draft` → `canceled`: OK
+        - `completed` → `canceled`: 409 invalid_transition
+        - `canceled` → `canceled`: 200 (idempotent)
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            pattern: ^[a-f\d]{24}$
+          description: Trip offer ID (MongoDB ObjectId)
+          example: 66a1b2c3d4e5f6a7b8c9d0e1
+      responses:
+        '200':
+          description: Trip canceled successfully (or already canceled - idempotent)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripOfferResponse'
+              examples:
+                canceled:
+                  summary: Trip successfully canceled
+                  value:
+                    id: 66a1b2c3d4e5f6a7b8c9d0e1
+                    driverId: 665e2af1b2c3d4e5f6a7b8c9
+                    vehicleId: 6680a1b2c3d4e5f6a7b8c9d0
+                    origin:
+                      text: Campus Norte
+                      geo:
+                        lat: 4.703
+                        lng: -74.041
+                    destination:
+                      text: Campus Sur
+                      geo:
+                        lat: 4.627
+                        lng: -74.064
+                    departureAt: '2025-11-01T07:30:00.000Z'
+                    estimatedArrivalAt: '2025-11-01T08:10:00.000Z'
+                    pricePerSeat: 6000
+                    totalSeats: 3
+                    status: canceled
+                    notes: Trip canceled by driver
+                    createdAt: '2025-10-22T10:00:00.000Z'
+                    updatedAt: '2025-10-22T11:30:00.000Z'
+                already_canceled:
+                  summary: Already canceled (idempotent)
+                  value:
+                    id: 66a1b2c3d4e5f6a7b8c9d0e1
+                    status: canceled
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorUnauthorized'
+        '403':
+          description: Forbidden (not owner or not a driver)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorForbidden'
+              examples:
+                not_owner:
+                  summary: Trip does not belong to the driver
+                  value:
+                    code: forbidden_owner
+                    message: Trip does not belong to the driver
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                csrf_missing:
+                  summary: CSRF token missing or invalid
+                  value:
+                    code: csrf_mismatch
+                    message: CSRF token missing or invalid
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '404':
+          description: Trip not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: trip_not_found
+                  message:
+                    type: string
+                    example: Trip offer not found
+                  correlationId:
+                    type: string
+        '409':
+          description: Conflict (cannot cancel completed trip)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: invalid_transition
+                  message:
+                    type: string
+                    example: Completed trips cannot be canceled
+                  correlationId:
+                    type: string
+              example:
+                code: invalid_transition
+                message: Completed trips cannot be canceled
+                correlationId: 123e4567-e89b-12d3-a456-426614174000
+  /api/users/me:
+    get:
+      tags:
+        - Users
+      summary: Get my profile
+      description: |
+        Returns the authenticated user's profile with sanitized data.
+        For drivers, includes `driver.hasVehicle` computed dynamically.
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponseDto'
+              examples:
+                passenger:
+                  summary: Passenger profile
+                  value:
+                    id: 665e2a...f1
+                    role: passenger
+                    firstName: Ana
+                    lastName: Ruiz
+                    universityId: '202420023'
+                    corporateEmail: aruiz@unisabana.edu.co
+                    phone: '+573001112233'
+                    profilePhotoUrl: https://cdn.example/u/665e2a/avatar.jpg
+                driver:
+                  summary: Driver profile with vehicle status
+                  value:
+                    id: 665e2a...f2
+                    role: driver
+                    firstName: Carlos
+                    lastName: Gómez
+                    universityId: '202420024'
+                    corporateEmail: cgomez@unisabana.edu.co
+                    phone: '+573004445566'
+                    profilePhotoUrl: null
+                    driver:
+                      hasVehicle: true
+        '401':
+          description: Unauthorized - Missing or invalid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorUnauthorized'
+              examples:
+                missingToken:
+                  summary: No access_token cookie
+                  value:
+                    code: unauthorized
+                    message: Missing or invalid session
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                expiredToken:
+                  summary: Token expired
+                  value:
+                    code: token_expired
+                    message: Session expired
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+    patch:
+      tags:
+        - Users
+      summary: Update my profile (partial)
+      description: |
+        Update authenticated user's profile. Supports JSON and multipart/form-data.
+
+        **Allowed fields**: `firstName`, `lastName`, `phone`, `profilePhoto` (file)
+        **Immutable fields** (403): `corporateEmail`, `universityId`, `role`, `id`, `password`
+
+        Photo replacement is atomic: old photo deleted only after successful update.
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+            examples:
+              updateName:
+                summary: Update first name only
+                value:
+                  firstName: Ana María
+              updatePhone:
+                summary: Update phone only
+                value:
+                  phone: '+573001112244'
+              updateMultiple:
+                summary: Update multiple fields
+                value:
+                  firstName: Ana María
+                  lastName: Ruiz García
+                  phone: '+573001112244'
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                firstName:
+                  type: string
+                  minLength: 2
+                  maxLength: 50
+                lastName:
+                  type: string
+                  minLength: 2
+                  maxLength: 50
+                phone:
+                  type: string
+                  pattern: ^\\+[1-9]\\d{1,14}$
+                profilePhoto:
+                  type: string
+                  format: binary
+                  description: JPEG, PNG, or WebP image (max 5MB)
+            examples:
+              withPhoto:
+                summary: Update with new profile photo
+                value:
+                  firstName: Ana María
+                  profilePhoto: (binary file data)
+              photoOnly:
+                summary: Replace photo without other changes
+                value:
+                  profilePhoto: (binary file data)
+      responses:
+        '200':
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponseDto'
+              examples:
+                updated:
+                  summary: Updated profile
+                  value:
+                    id: 665e2a...f1
+                    role: passenger
+                    firstName: Ana María
+                    lastName: Ruiz
+                    universityId: '202420023'
+                    corporateEmail: aruiz@unisabana.edu.co
+                    phone: '+573001112244'
+                    profilePhotoUrl: /uploads/profiles/profilePhoto-1701010101010-123.jpg
+        '400':
+          description: Validation error or unknown field
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorValidation'
+              examples:
+                validationFailed:
+                  summary: Invalid field format
+                  value:
+                    code: invalid_schema
+                    message: Validation failed
+                    details:
+                      - field: firstName
+                        issue: firstName length must be at least 2 characters long
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                unknownField:
+                  summary: Unknown field provided
+                  value:
+                    code: invalid_schema
+                    message: Unknown fields provided
+                    details:
+                      - field: unknownField
+                        issue: unknown field
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                invalidFileType:
+                  summary: Invalid MIME type
+                  value:
+                    code: invalid_file_type
+                    message: Unsupported MIME type
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '401':
+          description: Unauthorized - Missing or invalid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorUnauthorized'
+        '403':
+          description: Forbidden - Attempt to modify immutable field
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorForbidden'
+              examples:
+                immutableField:
+                  summary: Attempt to change corporateEmail
+                  value:
+                    code: immutable_field
+                    message: One or more fields cannot be updated
+                    details:
+                      - field: corporateEmail
+                        issue: immutable
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                multipleImmutable:
+                  summary: Multiple immutable fields
+                  value:
+                    code: immutable_field
+                    message: One or more fields cannot be updated
+                    details:
+                      - field: corporateEmail
+                        issue: immutable
+                      - field: role
+                        issue: immutable
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '413':
+          description: Payload too large - File exceeds size limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPayloadTooLarge'
+              example:
+                code: payload_too_large
+                message: File exceeds limit
+                correlationId: 123e4567-e89b-12d3-a456-426614174000
