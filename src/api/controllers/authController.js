@@ -153,12 +153,10 @@ class AuthController {
 
     // Clear the access_token cookie with EXACT same attributes as when set
     // This is critical for the cookie to be properly removed
-    const isProduction = process.env.NODE_ENV === 'production';
-    
     res.clearCookie('access_token', {
       httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? 'strict' : 'lax',
+      secure: true,
+      sameSite: 'none',
       path: '/'
     });
 

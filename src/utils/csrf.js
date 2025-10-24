@@ -71,12 +71,10 @@ function setCsrfCookie(res, token, options = {}) {
  * @param {Object} res - Express response object
  */
 function clearCsrfCookie(res) {
-  const isProduction = process.env.NODE_ENV === 'production';
-  
   res.clearCookie('csrf_token', {
     httpOnly: false,
-    secure: isProduction,
-    sameSite: isProduction ? 'strict' : 'lax',
+    secure: true,
+    sameSite: 'none',
     path: '/'
   });
 }

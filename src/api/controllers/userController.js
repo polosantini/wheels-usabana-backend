@@ -49,8 +49,8 @@ class UserController {
 
       res.cookie('access_token', token, {
         httpOnly: true,
-        secure: isProduction,
-        sameSite: isProduction ? 'strict' : 'lax',
+        secure: true,                // Always require HTTPS (Vercel uses HTTPS)
+        sameSite: 'none',            // Allow cross-site cookies (required for different Vercel domains)
         maxAge: cookieMaxAge,
         path: '/'
       });
@@ -175,8 +175,8 @@ class UserController {
 
       res.cookie('access_token', token, {
         httpOnly: true,
-        secure: isProduction,
-        sameSite: isProduction ? 'strict' : 'lax',
+        secure: true,                // Always require HTTPS (Vercel uses HTTPS)
+        sameSite: 'none',            // Allow cross-site cookies (required for different Vercel domains)
         maxAge: cookieMaxAge,
         path: '/'
       });
