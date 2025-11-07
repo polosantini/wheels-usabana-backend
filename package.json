@@ -1,0 +1,57 @@
+{
+  "name": "wheels-unisabana-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Wheels UniSabana carpooling application",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "db:clear": "node scripts/clear-database.js",
+    "db:clear-fast": "node scripts/clear-db.js",
+    "db:create-admin": "node scripts/create-admin-user.js"
+  },
+  "keywords": [
+    "carpooling",
+    "university",
+    "transport",
+    "api"
+  ],
+  "author": "Wheels UniSabana Team",
+  "license": "MIT",
+  "dependencies": {
+    "bcrypt": "^5.1.0",
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "express-validator": "^7.0.1",
+    "helmet": "^7.1.0",
+    "joi": "^17.11.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.0.3",
+    "morgan": "^1.10.1",
+    "multer": "^1.4.5-lts.1",
+    "node-cron": "^3.0.3",
+    "stripe": "^14.9.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "html-to-text": "^9.0.5",
+    "inline-css": "^3.0.0",
+    "jest": "^29.7.0",
+    "mongodb-memory-server": "^10.3.0",
+    "nodemon": "^3.0.2",
+    "sanitize-html": "^2.17.0",
+    "supertest": "^6.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

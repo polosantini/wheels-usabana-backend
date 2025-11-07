@@ -21,6 +21,11 @@ class PassengerTripController {
    * - qDestination: text search in destination (case-insensitive)
    * - fromDate: minimum departure date
    * - toDate: maximum departure date
+   * - fromTime: minimum departure time (HH:MM format)
+   * - toTime: maximum departure time (HH:MM format)
+   * - minAvailableSeats: minimum available seats required
+   * - minPrice: minimum price per seat
+   * - maxPrice: maximum price per seat
    * - page: page number (default: 1)
    * - pageSize: results per page (default: 10, max: 50)
    * 
@@ -28,10 +33,22 @@ class PassengerTripController {
    */
   async searchTrips(req, res, next) {
     try {
-      const { qOrigin, qDestination, fromDate, toDate, page, pageSize } = req.query;
+      const { 
+        qOrigin, 
+        qDestination, 
+        fromDate, 
+        toDate, 
+        fromTime,
+        toTime,
+        minAvailableSeats,
+        minPrice,
+        maxPrice,
+        page, 
+        pageSize 
+      } = req.query;
 
       console.log(
-        `[PassengerTripController] Search trips | qOrigin: ${qOrigin || 'none'} | qDestination: ${qDestination || 'none'} | fromDate: ${fromDate || 'none'} | toDate: ${toDate || 'none'} | page: ${page || 1} | pageSize: ${pageSize || 10} | correlationId: ${req.correlationId}`
+        `[PassengerTripController] Search trips | qOrigin: ${qOrigin || 'none'} | qDestination: ${qDestination || 'none'} | fromDate: ${fromDate || 'none'} | toDate: ${toDate || 'none'} | fromTime: ${fromTime || 'none'} | toTime: ${toTime || 'none'} | minAvailableSeats: ${minAvailableSeats || 'none'} | minPrice: ${minPrice || 'none'} | maxPrice: ${maxPrice || 'none'} | page: ${page || 1} | pageSize: ${pageSize || 10} | correlationId: ${req.correlationId}`
       );
 
       // Search published trips
@@ -40,6 +57,11 @@ class PassengerTripController {
         qDestination,
         fromDate,
         toDate,
+        fromTime,
+        toTime,
+        minAvailableSeats: minAvailableSeats ? parseInt(minAvailableSeats) : undefined,
+        minPrice: minPrice ? parseFloat(minPrice) : undefined,
+        maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
         page: page || 1,
         pageSize: pageSize || 10
       });

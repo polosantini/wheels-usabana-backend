@@ -127,6 +127,11 @@ class MongoTripOfferRepository extends TripOfferRepository {
    * @param {string} filters.qDestination - Destination text search (case-insensitive)
    * @param {Date} filters.fromDate - Minimum departure date
    * @param {Date} filters.toDate - Maximum departure date
+   * @param {string} filters.fromTime - Minimum departure time (HH:MM format)
+   * @param {string} filters.toTime - Maximum departure time (HH:MM format)
+   * @param {number} filters.minAvailableSeats - Minimum available seats required
+   * @param {number} filters.minPrice - Minimum price per seat
+   * @param {number} filters.maxPrice - Maximum price per seat
    * @param {number} filters.page - Page number (default: 1)
    * @param {number} filters.pageSize - Results per page (default: 10, max: 50)
    * @returns {Promise<Object>} { trips, total, page, pageSize, totalPages }
@@ -137,6 +142,11 @@ class MongoTripOfferRepository extends TripOfferRepository {
       qDestination,
       fromDate,
       toDate,
+      fromTime,
+      toTime,
+      minAvailableSeats,
+      minPrice,
+      maxPrice,
       page = 1,
       pageSize = 10
     } = filters;
@@ -170,19 +180,111 @@ class MongoTripOfferRepository extends TripOfferRepository {
       query.departureAt.$lte = new Date(toDate);
     }
 
+    // Time range filters (applied to departureAt hour)
+    if (fromTime || toTime) {
+      // We'll filter by time after fetching, or use aggregation
+      // For now, we'll apply time filters in memory after getting results
+      // This is simpler but less efficient for large datasets
+    }
+
+    // Price filters
+    if (minPrice !== undefined) {
+      query.pricePerSeat = query.pricePerSeat || {};
+      query.pricePerSeat.$gte = minPrice;
+    }
+
+    if (maxPrice !== undefined) {
+      query.pricePerSeat = query.pricePerSeat || {};
+      query.pricePerSeat.$lte = maxPrice;
+    }
+
     // Pagination
     const skip = (page - 1) * pageSize;
     const limit = Math.min(pageSize, 50); // Max 50 results per page
 
     // Execute query
-    const [docs, total] = await Promise.all([
-      TripOfferModel.find(query)
-        .sort({ departureAt: 1 }) // Sort by departure ascending (soonest first)
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      TripOfferModel.countDocuments(query)
-    ]);
+    let docs = await TripOfferModel.find(query)
+      .sort({ departureAt: 1 }) // Sort by departure ascending (soonest first)
+      .skip(skip)
+      .limit(limit * 2) // Fetch more to account for filtering
+      .lean();
+
+    // Apply time filters if specified
+    if (fromTime || toTime) {
+      docs = docs.filter(doc => {
+        const departure = new Date(doc.departureAt);
+        const hour = departure.getHours();
+        const minute = departure.getMinutes();
+        const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+        
+        if (fromTime && timeStr < fromTime) return false;
+        if (toTime && timeStr > toTime) return false;
+        return true;
+      });
+    }
+
+    // Filter by available seats if specified
+    if (minAvailableSeats !== undefined) {
+      const SeatLedgerModel = require('../database/models/SeatLedgerModel');
+      const tripIds = docs.map(doc => doc._id);
+      const ledgers = await SeatLedgerModel.find({ tripId: { $in: tripIds } }).lean();
+      const ledgerMap = new Map(ledgers.map(l => [l.tripId.toString(), l.allocatedSeats]));
+
+      docs = docs.filter(doc => {
+        const allocatedSeats = ledgerMap.get(doc._id.toString()) || 0;
+        const availableSeats = doc.totalSeats - allocatedSeats;
+        return availableSeats >= minAvailableSeats;
+      });
+    }
+
+    // Limit to requested page size after filtering
+    docs = docs.slice(0, limit);
+
+    // Get total count (with all filters applied)
+    // For accurate count, we need to apply all filters
+    let totalDocs = await TripOfferModel.find({
+      status: 'published',
+      departureAt: { $gt: new Date() },
+      ...(qOrigin && {
+        'origin.text': { $regex: qOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' }
+      }),
+      ...(qDestination && {
+        'destination.text': { $regex: qDestination.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' }
+      }),
+      ...(fromDate && { departureAt: { ...query.departureAt, $gte: new Date(fromDate) } }),
+      ...(toDate && { departureAt: { ...query.departureAt, $lte: new Date(toDate) } }),
+      ...(minPrice !== undefined && { pricePerSeat: { $gte: minPrice } }),
+      ...(maxPrice !== undefined && { pricePerSeat: { $lte: maxPrice } })
+    }).lean();
+
+    // Apply time and seat filters to total count
+    if (fromTime || toTime) {
+      totalDocs = totalDocs.filter(doc => {
+        const departure = new Date(doc.departureAt);
+        const hour = departure.getHours();
+        const minute = departure.getMinutes();
+        const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+        
+        if (fromTime && timeStr < fromTime) return false;
+        if (toTime && timeStr > toTime) return false;
+        return true;
+      });
+    }
+
+    if (minAvailableSeats !== undefined) {
+      const SeatLedgerModel = require('../database/models/SeatLedgerModel');
+      const tripIds = totalDocs.map(doc => doc._id);
+      const ledgers = await SeatLedgerModel.find({ tripId: { $in: tripIds } }).lean();
+      const ledgerMap = new Map(ledgers.map(l => [l.tripId.toString(), l.allocatedSeats]));
+
+      totalDocs = totalDocs.filter(doc => {
+        const allocatedSeats = ledgerMap.get(doc._id.toString()) || 0;
+        const availableSeats = doc.totalSeats - allocatedSeats;
+        return availableSeats >= minAvailableSeats;
+      });
+    }
+
+    const total = totalDocs.length;
 
     return {
       trips: this._toDomainArray(docs),

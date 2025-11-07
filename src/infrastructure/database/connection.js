@@ -5,8 +5,10 @@ const connectDB = async () => {
     const options = {
     };
 
-    // Conectar a MongoDB
-    const conn = await mongoose.connect(process.env.MONGODB_URI, options);
+  // Prefer test-specific in-memory URI when provided by test helper
+  const mongoUri = process.env.MONGO_URI_TEST || process.env.MONGODB_URI || process.env.MONGODB_URI_TEST;
+  // Conectar a MongoDB
+  const conn = await mongoose.connect(mongoUri, options);
     
     console.log(`✓ MongoDB Connected: ${conn.connection.host}`);
     console.log(`✓ Database: ${conn.connection.name}`);

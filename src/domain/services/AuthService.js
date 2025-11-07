@@ -12,7 +12,7 @@
  * - Key rotation-ready configuration
  */
 
-const bcrypt = require('bcryptjs');
+const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const ResetTokenUtil = require('../../utils/resetToken');
 

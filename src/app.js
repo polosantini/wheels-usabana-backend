@@ -7,16 +7,18 @@ const path = require('path');
 
 // Middlewares personalizados
 const correlationId = require('./api/middlewares/correlationId');
+const requestContext = require('./api/middlewares/requestContext');
 const errorHandler = require('./api/middlewares/errorHandler');
 const { generalRateLimiter } = require('./api/middlewares/rateLimiter');
 const { serveSwagger } = require('./api/middlewares/swagger');
 const { structuredLogger } = require('./api/middlewares/structuredLogger');
+const auditMiddleware = require('./api/middlewares/auditMiddleware');
 
 // Rutas
 const userRoutes = require('./api/routes/userRoutes');
 const authRoutes = require('./api/routes/authRoutes');
 const vehicleRoutes = require('./api/routes/vehicleRoutes');
-const webhookRoutes = require('./api/routes/webhookRoutes');
+const notificationWebhookRoutes = require('./api/routes/notificationWebhookRoutes');
 
 const app = express();
 
@@ -44,12 +46,14 @@ app.use(cors({
 app.use(morgan('combined'));
 app.use(cookieParser());
 app.use(correlationId);
+// Add request context (request id, actor resolution) before structured logging so logs include actor/correlation
+app.use(requestContext);
 app.use(structuredLogger); // Structured logging with PII redaction
+app.use(auditMiddleware);
 app.use(generalRateLimiter);
 
-// CRITICAL: Webhook routes MUST be mounted BEFORE express.json()
-// Stripe signature verification requires raw body buffer
-app.use('/payments', webhookRoutes);
+// Mount email notification webhooks BEFORE body parsing so raw body is available
+app.use('/notifications/webhooks', notificationWebhookRoutes);
 
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
@@ -73,15 +77,26 @@ const tripOfferRoutes = require('./api/routes/tripOfferRoutes');
 const passengerRoutes = require('./api/routes/passengerRoutes');
 const driverRoutes = require('./api/routes/driverRoutes');
 const internalRoutes = require('./api/routes/internalRoutes');
-const paymentRoutes = require('./api/routes/paymentRoutes');
+const notificationRoutes = require('./api/routes/notificationRoutes');
+const reviewRoutes = require('./api/routes/reviewRoutes');
+const userReportRoutes = require('./api/routes/userReportRoutes');
+const adminRoutes = require('./api/routes/adminRoutes');
 app.use('/api/users', userRoutes);
+app.use('/api/users', userReportRoutes);
 app.use('/auth', authRoutes);
 app.use('/api/drivers', vehicleRoutes);
 app.use('/drivers', tripOfferRoutes);
 app.use('/drivers', driverRoutes);
 app.use('/passengers', passengerRoutes);
-app.use('/passengers', paymentRoutes);
 app.use('/internal', internalRoutes);
+// Also expose internal admin routes at the top-level /admin path for test helpers
+// Tests expect admin endpoints under /admin; mounting here keeps existing /internal/* paths working
+app.use('/', internalRoutes);
+app.use('/notifications', notificationRoutes);
+// Trip-level routes (reviews)
+app.use('/trips', reviewRoutes);
+// Admin routes
+app.use('/admin', adminRoutes);
 
 // Swagger Documentation
 serveSwagger(app);

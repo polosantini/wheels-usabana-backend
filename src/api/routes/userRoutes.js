@@ -304,5 +304,16 @@ router.patch(
   userController.updateMyProfile.bind(userController)
 );
 
+/**
+ * GET /users/me/notification-preferences/metadata
+ * Returns guardrail metadata so clients can discover locked event/channel pairs
+ */
+router.get(
+  '/me/notification-preferences/metadata',
+  generalRateLimiter,
+  authenticate,
+  userController.getNotificationPreferencesMetadata.bind(userController)
+);
+
 module.exports = router;
 

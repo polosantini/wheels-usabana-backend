@@ -151,10 +151,19 @@ class BookingRequestController {
       );
 
       // Convert to DTOs (repository returns Mongoose docs with populated tripId)
-      const items = result.bookings.map(booking => BookingRequestResponseDto.fromDocument(booking));
+      const items = result.bookings.map(booking => {
+        const dto = BookingRequestResponseDto.fromDocument(booking);
+        // Debug: Log if trip is missing
+        if (!dto.trip) {
+          console.warn(
+            `[BookingRequestController] Booking ${dto.id} has no populated trip | tripId: ${dto.tripId} | correlationId: ${req.correlationId}`
+          );
+        }
+        return dto;
+      });
 
       console.log(
-        `[BookingRequestController] Booking requests listed | passengerId: ${passengerId} | total: ${result.total} | returned: ${items.length} | correlationId: ${req.correlationId}`
+        `[BookingRequestController] Booking requests listed | passengerId: ${passengerId} | total: ${result.total} | returned: ${items.length} | with trips: ${items.filter(i => i.trip).length} | correlationId: ${req.correlationId}`
       );
 
       res.status(200).json({

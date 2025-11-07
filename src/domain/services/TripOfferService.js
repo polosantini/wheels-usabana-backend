@@ -352,6 +352,106 @@ class TripOfferService {
   }
 
   /**
+   * Start a trip (change status from published to in_progress)
+   * Legal transitions: published → in_progress
+   * 
+   * @param {string} tripId - Trip ID to start
+   * @param {string} driverId - Driver ID (ownership validation)
+   * @returns {Promise<TripOffer>} Started trip offer
+   * @throws {DomainError} if trip not found or ownership violation
+   * @throws {InvalidTransitionError} if trip cannot be started from current state
+   */
+  async startTrip(tripId, driverId) {
+    console.log(`[TripOfferService] Attempting to start trip | tripId: ${tripId} | driverId: ${driverId}`);
+
+    // Find trip offer
+    const tripOffer = await this.tripOfferRepository.findById(tripId);
+    if (!tripOffer) {
+      throw new DomainError('Trip offer not found', 'trip_not_found', 404);
+    }
+
+    // Validate ownership
+    if (tripOffer.driverId !== driverId) {
+      throw new DomainError('Trip does not belong to the driver', 'ownership_violation', 403);
+    }
+
+    // Use entity's startTrip() method which enforces legal transitions
+    try {
+      tripOffer.startTrip();
+    } catch (error) {
+      if (error instanceof InvalidTransitionError) {
+        console.log(
+          `[TripOfferService] Invalid transition | tripId: ${tripId} | currentState: ${error.currentState} | attemptedState: ${error.attemptedState}`
+        );
+        throw error;
+      }
+      throw error;
+    }
+
+    // Persist status change
+    const startedTripOffer = await this.tripOfferRepository.update(tripId, {
+      status: tripOffer.status,
+      updatedAt: tripOffer.updatedAt
+    });
+
+    console.log(
+      `[TripOfferService] Trip started | tripId: ${tripId} | driverId: ${driverId} | previousStatus: published`
+    );
+
+    return startedTripOffer;
+  }
+
+  /**
+   * Complete a trip (change status from in_progress to completed)
+   * Legal transitions: in_progress → completed
+   * 
+   * @param {string} tripId - Trip ID to complete
+   * @param {string} driverId - Driver ID (ownership validation)
+   * @returns {Promise<TripOffer>} Completed trip offer
+   * @throws {DomainError} if trip not found or ownership violation
+   * @throws {InvalidTransitionError} if trip cannot be completed from current state
+   */
+  async completeTrip(tripId, driverId) {
+    console.log(`[TripOfferService] Attempting to complete trip | tripId: ${tripId} | driverId: ${driverId}`);
+
+    // Find trip offer
+    const tripOffer = await this.tripOfferRepository.findById(tripId);
+    if (!tripOffer) {
+      throw new DomainError('Trip offer not found', 'trip_not_found', 404);
+    }
+
+    // Validate ownership
+    if (tripOffer.driverId !== driverId) {
+      throw new DomainError('Trip does not belong to the driver', 'ownership_violation', 403);
+    }
+
+    // Use entity's completeTrip() method which enforces legal transitions
+    try {
+      tripOffer.completeTrip();
+    } catch (error) {
+      if (error instanceof InvalidTransitionError) {
+        console.log(
+          `[TripOfferService] Invalid transition | tripId: ${tripId} | currentState: ${error.currentState} | attemptedState: ${error.attemptedState}`
+        );
+        throw error;
+      }
+      throw error;
+    }
+
+    // Persist status change
+    const completedTripOffer = await this.tripOfferRepository.update(tripId, {
+      status: tripOffer.status,
+      updatedAt: tripOffer.updatedAt
+    });
+
+    console.log(
+      `[TripOfferService] Trip completed | tripId: ${tripId} | driverId: ${driverId} | previousStatus: in_progress`
+    );
+
+    return completedTripOffer;
+  }
+
+  /**
    * Cancel trip offer with cascade to all bookings (US-3.4.2)
    * 
    * Atomically:
@@ -419,6 +519,10 @@ class TripOfferService {
     }
 
     // 5. Query all bookings for cascade (outside transaction for efficiency)
+    console.log(
+      `[TripOfferService] Querying bookings for cascade | tripId: ${tripId} | type: ${typeof tripId}`
+    );
+    
     const [pendingBookings, acceptedBookings] = await Promise.all([
       bookingRequestRepository.findAllPendingByTrip(tripId),
       bookingRequestRepository.findAllAcceptedByTrip(tripId)
@@ -427,6 +531,24 @@ class TripOfferService {
     console.log(
       `[TripOfferService] Found bookings for cascade | tripId: ${tripId} | pending: ${pendingBookings.length} | accepted: ${acceptedBookings.length}`
     );
+    
+    // Debug: Log booking details
+    if (pendingBookings.length > 0) {
+      console.log(`[TripOfferService] Pending bookings:`, pendingBookings.map(b => ({
+        id: b.id,
+        passengerId: b.passengerId,
+        tripId: b.tripId,
+        status: b.status
+      })));
+    }
+    if (acceptedBookings.length > 0) {
+      console.log(`[TripOfferService] Accepted bookings:`, acceptedBookings.map(b => ({
+        id: b.id,
+        passengerId: b.passengerId,
+        tripId: b.tripId,
+        status: b.status
+      })));
+    }
 
     // 6. Execute cascade transaction
     const TripOfferModel = require('../../infrastructure/database/models/TripOfferModel');
@@ -494,6 +616,61 @@ class TripOfferService {
       console.log(
         `[TripOfferService] Cascade completed | tripId: ${tripId} | effects: ${JSON.stringify(effects)}`
       );
+
+      // Notify all affected passengers (pending + accepted)
+      const NotificationService = require('./NotificationService');
+      
+      // Extract passenger IDs (they're already strings from _toDomain conversion)
+      const allPassengerIds = [
+        ...pendingBookings.map(b => {
+          const pid = b.passengerId?.toString ? b.passengerId.toString() : String(b.passengerId);
+          console.log(`[TripOfferService] Pending booking passengerId: ${pid} (type: ${typeof b.passengerId})`);
+          return pid;
+        }),
+        ...acceptedBookings.map(b => {
+          const pid = b.passengerId?.toString ? b.passengerId.toString() : String(b.passengerId);
+          console.log(`[TripOfferService] Accepted booking passengerId: ${pid} (type: ${typeof b.passengerId})`);
+          return pid;
+        })
+      ].filter(Boolean); // Remove any null/undefined values
+
+      console.log(
+        `[TripOfferService] Preparing notifications | tripId: ${tripId} | total passengerIds: ${allPassengerIds.length} | pending: ${pendingBookings.length} | accepted: ${acceptedBookings.length}`
+      );
+
+      if (allPassengerIds.length > 0) {
+        // Remove duplicates
+        const uniquePassengerIds = [...new Set(allPassengerIds)];
+        console.log(
+          `[TripOfferService] Creating notifications for ${uniquePassengerIds.length} unique passengers | tripId: ${tripId}`
+        );
+        
+        try {
+          const createdCount = await NotificationService.createNotifications(
+            uniquePassengerIds,
+            'trip.canceled',
+            'Viaje cancelado',
+            `El viaje ha sido cancelado por el conductor.`,
+            {
+              tripId: tripId,
+              driverId: driverId
+            }
+          );
+          console.log(
+            `[TripOfferService] Notifications created | tripId: ${tripId} | count: ${createdCount}`
+          );
+        } catch (error) {
+          console.error(
+            `[TripOfferService] Failed to create notifications | tripId: ${tripId}`,
+            error.message,
+            error.stack
+          );
+        }
+      } else {
+        console.log(
+          `[TripOfferService] No passengers to notify | tripId: ${tripId} | pending: ${pendingBookings.length} | accepted: ${acceptedBookings.length}`
+        );
+      }
 
       return {
         tripId,

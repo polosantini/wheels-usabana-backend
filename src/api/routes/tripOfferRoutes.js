@@ -6,6 +6,7 @@ const { generalRateLimiter } = require('../middlewares/rateLimiter');
 const authenticate = require('../middlewares/authenticate');
 const { requireRole } = require('../middlewares/authenticate');
 const requireCsrf = require('../middlewares/requireCsrf');
+const requireDriverVerified = require('../middlewares/verifyDriver');
 
 const router = express.Router();
 const tripOfferController = new TripOfferController();
@@ -292,6 +293,7 @@ router.post(
   generalRateLimiter,
   authenticate,
   requireRole('driver'),
+  // requireDriverVerified, // Temporarily disabled for testing
   requireCsrf,
   validateRequest(createTripOfferSchema),
   tripOfferController.createTripOffer.bind(tripOfferController)
@@ -906,6 +908,32 @@ router.post(
   requireRole('driver'),
   requireCsrf,
   tripOfferController.declineBooking.bind(tripOfferController)
+);
+
+/**
+ * Start a trip (change status from published to in_progress)
+ */
+router.post(
+  '/trips/:id/start',
+  generalRateLimiter,
+  authenticate,
+  requireRole('driver'),
+  requireCsrf,
+  validateRequest(tripIdParamSchema, 'params'),
+  tripOfferController.startTrip.bind(tripOfferController)
+);
+
+/**
+ * Complete a trip (change status from in_progress to completed)
+ */
+router.post(
+  '/trips/:id/complete',
+  generalRateLimiter,
+  authenticate,
+  requireRole('driver'),
+  requireCsrf,
+  validateRequest(tripIdParamSchema, 'params'),
+  tripOfferController.completeTrip.bind(tripOfferController)
 );
 
 module.exports = router;

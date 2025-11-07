@@ -25,6 +25,9 @@ const requireCsrf = require('../middlewares/requireCsrf');
 const router = express.Router();
 const passengerTripController = new PassengerTripController();
 const bookingRequestController = new BookingRequestController();
+const ReviewController = require('../controllers/reviewController');
+const reviewController = new ReviewController();
+const { reviewIdParamSchema } = require('../validation/reviewSchemas');
 
 /**
  * @openapi
@@ -789,6 +792,36 @@ router.post(
   validateRequest(bookingIdParamSchema, 'params'),
   validateRequest(cancelBookingRequestSchema, 'body'),
   bookingRequestController.cancelMyBookingRequest.bind(bookingRequestController)
+);
+
+// GET my review for a trip
+router.get(
+  '/trips/:tripId/reviews/me',
+  authenticate,
+  requireRole('passenger'),
+  validateRequest(require('../validation/bookingRequestSchemas').tripIdParamSchema, 'params'),
+  reviewController.getMyReviewForTrip.bind(reviewController)
+);
+
+// DELETE my review for a trip (soft-delete within 24h window)
+router.delete(
+  '/trips/:tripId/reviews/:reviewId',
+  authenticate,
+  requireRole('passenger'),
+  requireCsrf,
+  validateRequest(require('../validation/reviewSchemas').reviewParamsSchema, 'params'),
+  reviewController.deleteMyReview.bind(reviewController)
+);
+
+// PATCH edit my review within 24h
+router.patch(
+  '/trips/:tripId/reviews/:reviewId',
+  authenticate,
+  requireRole('passenger'),
+  requireCsrf,
+  validateRequest(require('../validation/reviewSchemas').reviewParamsSchema, 'params'),
+  validateRequest(require('../validation/reviewSchemas').updateReviewBodySchema, 'body'),
+  reviewController.editMyReview.bind(reviewController)
 );
 
 module.exports = router;

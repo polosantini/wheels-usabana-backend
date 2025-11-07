@@ -81,6 +81,36 @@ const vehicleUpload = multer({
   }
 });
 
+// Verification uploads (IDs, license, soat) - allow PDFs and images
+const verificationUploadDir = `${uploadBaseDir}/verifications`;
+if (!isVercel) {
+  if (!fs.existsSync(verificationUploadDir)) fs.mkdirSync(verificationUploadDir, { recursive: true });
+}
+
+const verificationStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, verificationUploadDir),
+  filename: (req, file, cb) => {
+    // safe filename: fieldname-timestamp-rand.ext
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname).replace(/[^a-zA-Z0-9.]/g, '');
+    cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
+  }
+});
+
+const verificationFileFilter = (req, file, cb) => {
+  const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+  if (allowed.includes(file.mimetype)) return cb(null, true);
+  return cb(new Error('Unsupported file type. Only JPEG, PNG, WebP or PDF are allowed.'), false);
+};
+
+const verificationUpload = multer({
+  storage: verificationStorage,
+  fileFilter: verificationFileFilter,
+  limits: {
+    fileSize: parseInt(process.env.MAX_VERIFICATION_MB || '10') * 1024 * 1024 // 10MB default
+  }
+});
+
 // Middleware para manejar errores de Multer
 const handleUploadError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
@@ -101,7 +131,7 @@ const handleUploadError = (err, req, res, next) => {
     }
   }
   
-  if (err && err.message === 'Unsupported file type. Only JPEG, PNG, and WebP are allowed.') {
+  if (err && err.message && err.message.includes('Unsupported file type')) {
     return res.status(400).json({
       code: 'invalid_file_type',
       message: 'Unsupported MIME type',
@@ -182,4 +212,6 @@ module.exports = {
   handleUploadError,
   cleanupOnError
 };
+// Export verification upload for driver docs
+module.exports.verificationUpload = verificationUpload;
 

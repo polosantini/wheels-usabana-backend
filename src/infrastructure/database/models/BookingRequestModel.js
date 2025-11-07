@@ -41,6 +41,7 @@ const bookingRequestSchema = new mongoose.Schema(
           'accepted',
           'declined',
           'declined_auto', // US-3.4.2: Auto-declined when driver cancels trip
+          'declined_by_admin', // Admin manual decline
           'canceled_by_passenger',
           'canceled_by_platform', // US-3.4.2: Canceled when driver cancels trip
           'expired'

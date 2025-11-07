@@ -79,6 +79,36 @@ const structuredLogger = (req, res, next) => {
 
   console.log(JSON.stringify(requestLog));
 
+  // Attach a minimal structured logger to the request so controllers can use
+  // `req.log.info/error` without depending on external logging middleware.
+  // The logger will redact PII and include the correlationId automatically.
+  req.log = {
+    info: (meta, message) => {
+      try {
+        const payload = Object.assign({}, redactPII(meta || {}), { correlationId: req.correlationId, message });
+        console.log(JSON.stringify(payload));
+      } catch (err) {
+        console.log(message, meta);
+      }
+    },
+    error: (meta, message) => {
+      try {
+        const payload = Object.assign({}, redactPII(meta || {}), { correlationId: req.correlationId, message });
+        console.error(JSON.stringify(payload));
+      } catch (err) {
+        console.error(message, meta);
+      }
+    },
+    debug: (meta, message) => {
+      try {
+        const payload = Object.assign({}, redactPII(meta || {}), { correlationId: req.correlationId, message });
+        console.log(JSON.stringify(payload));
+      } catch (err) {
+        console.log(message, meta);
+      }
+    }
+  };
+
   // Intercept response to log completion
   const originalSend = res.send;
   const originalJson = res.json;

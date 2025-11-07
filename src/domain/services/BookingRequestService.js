@@ -12,6 +12,7 @@
 
 const DomainError = require('../errors/DomainError');
 const InvalidTransitionError = require('../errors/InvalidTransitionError');
+const NotificationService = require('./NotificationService');
 
 class BookingRequestService {
   constructor(bookingRequestRepository, tripOfferRepository) {
@@ -116,6 +117,20 @@ class BookingRequestService {
 
     console.log(
       `[BookingRequestService] Booking request created | bookingId: ${bookingRequest.id} | passengerId: ${passengerId} | tripId: ${tripId} | status: ${bookingRequest.status}`
+    );
+
+    // Notify driver of new booking request
+    await NotificationService.createNotification(
+      trip.driverId,
+      'booking.new',
+      'Nueva solicitud de reserva',
+      `Tienes una nueva solicitud de reserva para tu viaje.`,
+      {
+        bookingId: bookingRequest.id,
+        tripId: trip.id,
+        passengerId: passengerId,
+        seats: bookingRequest.seats
+      }
     );
 
     return bookingRequest;
@@ -249,13 +264,10 @@ class BookingRequestService {
         `[BookingRequestService] Canceling accepted booking (transaction) | bookingId: ${bookingId} | tripId: ${bookingRequest.tripId} | seats: ${bookingRequest.seats}`
       );
 
-      // TODO (US-4.2): Fetch payment status and policy eligibility to pass to entity
-      const isPaid = false; // Placeholder: will be determined from payment service
-      const policyEligible = true; // Placeholder: will check cancellation policy
-
+      // Payment functionality removed - no payment/refund logic needed
       try {
-        // Use entity method to update status, set refundNeeded flag, and store reason
-        bookingRequest.cancelByPassenger(isPaid, policyEligible, reason);
+        // Use entity method to update status and store reason
+        bookingRequest.cancelByPassenger(false, false, reason);
 
         // Execute transaction
         const canceledBooking = await this.bookingRequestRepository.cancelWithTransaction(
@@ -267,13 +279,44 @@ class BookingRequestService {
           `[BookingRequestService] Accepted booking canceled | bookingId: ${bookingId} | tripId: ${bookingRequest.tripId} | seats: ${bookingRequest.seats} | refundNeeded: ${bookingRequest.refundNeeded}`
         );
 
+        // Notify passenger and driver about cancellation
+        const trip = await this.tripOfferRepository.findById(bookingRequest.tripId);
+        if (trip) {
+          // Notify passenger
+          await NotificationService.createNotification(
+            bookingRequest.passengerId,
+            'booking.canceled',
+            'Reserva cancelada',
+            'Tu reserva ha sido cancelada exitosamente.',
+            {
+              bookingId: canceledBooking.id,
+              tripId: trip.id,
+              seats: canceledBooking.seats
+            }
+          );
+
+          // Notify driver
+          await NotificationService.createNotification(
+            trip.driverId,
+            'booking.canceled_by_passenger',
+            'Reserva cancelada por pasajero',
+            `Un pasajero ha cancelado su reserva para tu viaje.`,
+            {
+              bookingId: canceledBooking.id,
+              tripId: trip.id,
+              passengerId: bookingRequest.passengerId,
+              seats: canceledBooking.seats
+            }
+          );
+        }
+
         // Return effects summary
         return {
           bookingId: canceledBooking.id,
           status: 'canceled_by_passenger',
           effects: {
             ledgerReleased: seatsToRelease,
-            refundCreated: bookingRequest.refundNeeded // TODO: Will be true once payment service integration is done
+            refundCreated: false // Payment functionality removed
           }
         };
       } catch (error) {
@@ -303,6 +346,37 @@ class BookingRequestService {
         console.log(
           `[BookingRequestService] Pending booking canceled | bookingId: ${bookingId} | previousStatus: pending`
         );
+
+        // Notify passenger and driver about cancellation
+        const trip = await this.tripOfferRepository.findById(bookingRequest.tripId);
+        if (trip) {
+          // Notify passenger
+          await NotificationService.createNotification(
+            bookingRequest.passengerId,
+            'booking.canceled',
+            'Reserva cancelada',
+            'Tu solicitud de reserva ha sido cancelada.',
+            {
+              bookingId: canceledBooking.id,
+              tripId: trip.id,
+              seats: canceledBooking.seats
+            }
+          );
+
+          // Notify driver
+          await NotificationService.createNotification(
+            trip.driverId,
+            'booking.canceled_by_passenger',
+            'Solicitud de reserva cancelada',
+            `Un pasajero ha cancelado su solicitud de reserva para tu viaje.`,
+            {
+              bookingId: canceledBooking.id,
+              tripId: trip.id,
+              passengerId: bookingRequest.passengerId,
+              seats: canceledBooking.seats
+            }
+          );
+        }
 
         // Return effects summary
         return {
@@ -438,6 +512,20 @@ class BookingRequestService {
       `[BookingRequestService] Booking request accepted | bookingId: ${bookingId} | driverId: ${driverId} | passengerId: ${bookingRequest.passengerId} | seats: ${bookingRequest.seats} | allocatedSeats: ${ledger.allocatedSeats}`
     );
 
+    // Notify passenger that booking was accepted
+    await NotificationService.createNotification(
+      bookingRequest.passengerId,
+      'booking.accepted',
+      'Reserva aceptada',
+      `Tu solicitud de reserva ha sido aceptada por el conductor.`,
+      {
+        bookingId: acceptedBooking.id,
+        tripId: trip.id,
+        driverId: driverId,
+        seats: acceptedBooking.seats
+      }
+    );
+
     return acceptedBooking;
   }
 
@@ -509,6 +597,20 @@ class BookingRequestService {
 
     console.log(
       `[BookingRequestService] Booking request declined | bookingId: ${bookingId} | driverId: ${driverId} | passengerId: ${bookingRequest.passengerId}`
+    );
+
+    // Notify passenger that booking was declined
+    await NotificationService.createNotification(
+      bookingRequest.passengerId,
+      'booking.declined',
+      'Reserva rechazada',
+      reason ? `Tu solicitud de reserva fue rechazada: ${reason}` : 'Tu solicitud de reserva fue rechazada por el conductor.',
+      {
+        bookingId: declinedBooking.id,
+        tripId: trip.id,
+        driverId: driverId,
+        reason: reason || null
+      }
     );
 
     return declinedBooking;

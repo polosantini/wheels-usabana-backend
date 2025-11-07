@@ -3,6 +3,7 @@ const AuthService = require('../../domain/services/AuthService');
 const MongoUserRepository = require('../../infrastructure/repositories/MongoUserRepository');
 const UpdateProfileDto = require('../../domain/dtos/UpdateProfileDto');
 const { generateCsrfToken, setCsrfCookie } = require('../../utils/csrf');
+const prefsConfig = require('../../domain/config/notificationPreferencesConfig');
 
 class UserController {
   constructor() {
@@ -291,6 +292,19 @@ class UserController {
 
       // Otros errores pasan al error handler global
       next(error);
+    }
+  }
+
+  /**
+   * GET /users/me/notification-preferences/metadata
+   * Returns guardrail metadata (which event/channel pairs are locked/non-editable)
+   */
+  async getNotificationPreferencesMetadata(req, res, next) {
+    try {
+      // Return the locked map so clients can discover guardrails
+      return res.status(200).json({ locked: prefsConfig.locked });
+    } catch (err) {
+      next(err);
     }
   }
 }

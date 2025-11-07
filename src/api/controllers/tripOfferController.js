@@ -239,7 +239,38 @@ class TripOfferController {
       // Create DTO from request body
       const updateDto = UpdateTripOfferDto.fromRequest(req.body);
 
-      // Update via service (includes ownership and invariant checks)
+      // If canceling, use cascade cancellation to notify passengers
+      if (updateDto.status === 'canceled') {
+        console.log(
+          `[TripOfferController] Cancel detected in update, using cascade cancellation | tripId: ${id} | correlationId: ${req.correlationId}`
+        );
+        
+        // Initialize repositories for cascade cancellation
+        const MongoBookingRequestRepository = require('../../infrastructure/repositories/MongoBookingRequestRepository');
+        const MongoSeatLedgerRepository = require('../../infrastructure/repositories/MongoSeatLedgerRepository');
+        const bookingRequestRepository = new MongoBookingRequestRepository();
+        const seatLedgerRepository = new MongoSeatLedgerRepository();
+
+        // Use cascade cancellation (includes notifications)
+        const result = await this.tripOfferService.cancelTripWithCascade(
+          id,
+          driverId,
+          bookingRequestRepository,
+          seatLedgerRepository
+        );
+
+        // Map to response format
+        const canceledTrip = await this.tripOfferService.getTripOfferById(id);
+        const responseDto = TripOfferResponseDto.fromDomain(canceledTrip);
+
+        console.log(
+          `[TripOfferController] Trip canceled with cascade | tripId: ${id} | effects: ${JSON.stringify(result.effects)} | correlationId: ${req.correlationId}`
+        );
+
+        return res.status(200).json(responseDto);
+      }
+
+      // Regular update (not canceling)
       const updatedTrip = await this.tripOfferService.updateTripOffer(id, driverId, updateDto);
 
       const responseDto = TripOfferResponseDto.fromDomain(updatedTrip);
@@ -308,6 +339,114 @@ class TripOfferController {
       if (error.code === 'overlapping_trip') {
         return res.status(409).json({
           code: 'overlapping_trip',
+          message: error.message,
+          correlationId: req.correlationId
+        });
+      }
+
+      next(error);
+    }
+  }
+
+  /**
+   * POST /drivers/trips/:id/start
+   * Start a trip (change status from published to in_progress)
+   */
+  async startTrip(req, res, next) {
+    try {
+      const { id } = req.params;
+      const driverId = req.user.sub;
+
+      console.log(
+        `[TripOfferController] Start trip | tripId: ${id} | driverId: ${driverId} | correlationId: ${req.correlationId}`
+      );
+
+      const startedTrip = await this.tripOfferService.startTrip(id, driverId);
+      const responseDto = TripOfferResponseDto.fromDomain(startedTrip);
+
+      console.log(
+        `[TripOfferController] Trip started | tripId: ${id} | status: ${startedTrip.status} | correlationId: ${req.correlationId}`
+      );
+
+      res.status(200).json(responseDto);
+    } catch (error) {
+      console.error(
+        `[TripOfferController] Start failed | tripId: ${req.params.id} | driverId: ${req.user?.sub} | error: ${error.message} | correlationId: ${req.correlationId}`
+      );
+
+      if (error.code === 'trip_not_found') {
+        return res.status(404).json({
+          code: 'trip_not_found',
+          message: 'Trip offer not found',
+          correlationId: req.correlationId
+        });
+      }
+
+      if (error.code === 'ownership_violation') {
+        return res.status(403).json({
+          code: 'forbidden_owner',
+          message: error.message,
+          correlationId: req.correlationId
+        });
+      }
+
+      if (error.code === 'invalid_status_transition') {
+        return res.status(409).json({
+          code: 'invalid_transition',
+          message: error.message,
+          correlationId: req.correlationId
+        });
+      }
+
+      next(error);
+    }
+  }
+
+  /**
+   * POST /drivers/trips/:id/complete
+   * Complete a trip (change status from in_progress to completed)
+   */
+  async completeTrip(req, res, next) {
+    try {
+      const { id } = req.params;
+      const driverId = req.user.sub;
+
+      console.log(
+        `[TripOfferController] Complete trip | tripId: ${id} | driverId: ${driverId} | correlationId: ${req.correlationId}`
+      );
+
+      const completedTrip = await this.tripOfferService.completeTrip(id, driverId);
+      const responseDto = TripOfferResponseDto.fromDomain(completedTrip);
+
+      console.log(
+        `[TripOfferController] Trip completed | tripId: ${id} | status: ${completedTrip.status} | correlationId: ${req.correlationId}`
+      );
+
+      res.status(200).json(responseDto);
+    } catch (error) {
+      console.error(
+        `[TripOfferController] Complete failed | tripId: ${req.params.id} | driverId: ${req.user?.sub} | error: ${error.message} | correlationId: ${req.correlationId}`
+      );
+
+      if (error.code === 'trip_not_found') {
+        return res.status(404).json({
+          code: 'trip_not_found',
+          message: 'Trip offer not found',
+          correlationId: req.correlationId
+        });
+      }
+
+      if (error.code === 'ownership_violation') {
+        return res.status(403).json({
+          code: 'forbidden_owner',
+          message: error.message,
+          correlationId: req.correlationId
+        });
+      }
+
+      if (error.code === 'invalid_status_transition') {
+        return res.status(409).json({
+          code: 'invalid_transition',
           message: error.message,
           correlationId: req.correlationId
         });

@@ -23,9 +23,8 @@ class VehicleController {
    */
   async createVehicle(req, res, next) {
     try {
-      // TODO: Get driverId from authenticated user (req.user.id)
-      // For now, we'll get it from request body for testing
-      const driverId = req.body.driverId || req.user?.id;
+      // Get driverId from authenticated user (req.user.sub from JWT)
+      const driverId = req.user?.sub;
 
       if (!driverId) {
         return res.status(401).json({
@@ -40,14 +39,40 @@ class VehicleController {
         soatPhoto: req.files?.soatPhoto?.[0]
       };
 
+      // Log incoming request data
+      console.log('[VehicleController] Creating vehicle - Request data:', {
+        body: req.body,
+        files: files ? {
+          vehiclePhoto: files.vehiclePhoto ? 'present' : 'missing',
+          soatPhoto: files.soatPhoto ? 'present' : 'missing'
+        } : 'no files',
+        driverId: driverId
+      });
+
       // Create vehicle DTO from request
       const createVehicleDto = CreateVehicleDto.fromMultipart(req.body, files, driverId);
+      
+      console.log('[VehicleController] DTO created:', {
+        plate: createVehicleDto.plate,
+        brand: createVehicleDto.brand,
+        model: createVehicleDto.model,
+        capacity: createVehicleDto.capacity
+      });
       
       // Validate DTO
       createVehicleDto.validate();
 
       // Create vehicle through service
       const vehicle = await this.vehicleService.createVehicle(createVehicleDto);
+
+      console.log('[VehicleController] Vehicle created successfully:', {
+        id: vehicle.id,
+        plate: vehicle.plate,
+        brand: vehicle.brand,
+        model: vehicle.model,
+        capacity: vehicle.capacity,
+        driverId: driverId
+      });
 
       res.status(201).json(vehicle);
     } catch (error) {
@@ -65,8 +90,8 @@ class VehicleController {
    */
   async getMyVehicle(req, res, next) {
     try {
-      // TODO: Get driverId from authenticated user (req.user.id)
-      const driverId = req.query.driverId || req.user?.id;
+      // Get driverId from authenticated user (req.user.sub from JWT)
+      const driverId = req.user?.sub;
 
       if (!driverId) {
         return res.status(401).json({
@@ -78,11 +103,21 @@ class VehicleController {
       const vehicle = await this.vehicleService.getVehicleByDriverId(driverId);
 
       if (!vehicle) {
+        console.log('[VehicleController] Vehicle not found for driver:', driverId);
         return res.status(404).json({
           code: 'vehicle_not_found',
           message: 'Vehicle not found for this driver'
         });
       }
+
+      console.log('[VehicleController] Vehicle retrieved:', {
+        id: vehicle.id,
+        plate: vehicle.plate,
+        brand: vehicle.brand,
+        model: vehicle.model,
+        capacity: vehicle.capacity,
+        driverId: driverId
+      });
 
       res.status(200).json(vehicle);
     } catch (error) {
@@ -101,8 +136,8 @@ class VehicleController {
    */
   async updateMyVehicle(req, res, next) {
     try {
-      // TODO: Get driverId from authenticated user (req.user.id)
-      const driverId = req.body.driverId || req.user?.id;
+      // Get driverId from authenticated user (req.user.sub from JWT)
+      const driverId = req.user?.sub;
 
       if (!driverId) {
         return res.status(401).json({
@@ -149,8 +184,8 @@ class VehicleController {
    */
   async deleteMyVehicle(req, res, next) {
     try {
-      // TODO: Get driverId from authenticated user (req.user.id)
-      const driverId = req.query.driverId || req.user?.id;
+      // Get driverId from authenticated user (req.user.sub from JWT)
+      const driverId = req.user?.sub;
 
       if (!driverId) {
         return res.status(401).json({

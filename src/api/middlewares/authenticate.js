@@ -1,4 +1,5 @@
 const AuthService = require('../../domain/services/AuthService');
+const UserModel = require('../../infrastructure/database/models/UserModel');
 
 /**
  * Middleware de autenticación JWT
@@ -51,7 +52,20 @@ const authenticate = (req, res, next) => {
       exp: decoded.exp
     };
 
-    next();
+    // Check if account is suspended in DB
+    (async () => {
+      try {
+        const doc = await UserModel.findById(decoded.sub).select('suspended suspendedAt');
+        if (doc && doc.suspended) {
+          return res.status(403).json({ code: 'account_suspended', message: 'Account suspended', correlationId: req.correlationId });
+        }
+        next();
+      } catch (err) {
+        // If DB check fails, continue but log
+        console.error('[authenticate] Failed to verify user suspension status:', err && err.message);
+        next();
+      }
+    })();
   } catch (error) {
     // Token expirado
     if (error.name === 'TokenExpiredError') {

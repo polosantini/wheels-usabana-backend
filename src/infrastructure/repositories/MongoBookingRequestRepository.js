@@ -30,7 +30,7 @@ class MongoBookingRequestRepository {
       declinedAt: obj.declinedAt,
       declinedBy: obj.declinedBy ? obj.declinedBy.toString() : null,
       canceledAt: obj.canceledAt,
-      isPaid: obj.isPaid || false, // US-4.1.5: Payment status
+      isPaid: false, // Payment functionality removed
       createdAt: obj.createdAt,
       updatedAt: obj.updatedAt
     });
@@ -141,13 +141,29 @@ class MongoBookingRequestRepository {
    * Find booking requests with populated trip data (for API responses)
    * @param {string} passengerId - Passenger ID
    * @param {Object} filters - Optional filters
+   * @param {string|string[]} filters.status - Status filter (single or array)
+   * @param {Date} filters.fromDate - Minimum createdAt date
+   * @param {Date} filters.toDate - Maximum createdAt date
+   * @param {number} filters.page - Page number (default: 1)
+   * @param {number} filters.limit - Results per page (default: 10)
    * @returns {Promise<Object>} Paginated results with Mongoose documents (with populated tripId)
    */
-  async findByPassengerWithTrip(passengerId, { status, page = 1, limit = 10 } = {}) {
+  async findByPassengerWithTrip(passengerId, { status, fromDate, toDate, page = 1, limit = 10 } = {}) {
     const query = { passengerId };
 
     if (status) {
       query.status = Array.isArray(status) ? { $in: status } : status;
+    }
+
+    // Date range filters
+    if (fromDate || toDate) {
+      query.createdAt = {};
+      if (fromDate) {
+        query.createdAt.$gte = fromDate;
+      }
+      if (toDate) {
+        query.createdAt.$lte = toDate;
+      }
     }
 
     const skip = (page - 1) * limit;
@@ -169,6 +185,21 @@ class MongoBookingRequestRepository {
         .lean(),
       BookingRequestModel.countDocuments(query)
     ]);
+
+    console.log(`[MongoBookingRequestRepository] findByPassengerWithTrip | passengerId: ${passengerId} | query: ${JSON.stringify(query)} | found: ${docs.length} bookings | total: ${total}`);
+    
+    // Debug: Log first booking structure if exists
+    if (docs.length > 0) {
+      console.log(`[MongoBookingRequestRepository] First booking structure:`, {
+        id: docs[0]._id?.toString(),
+        tripId: docs[0].tripId?._id?.toString() || docs[0].tripId?.toString(),
+        tripIdType: typeof docs[0].tripId,
+        hasTrip: !!docs[0].tripId,
+        tripOrigin: docs[0].tripId?.origin,
+        tripDestination: docs[0].tripId?.destination,
+        tripDriver: docs[0].tripId?.driverId
+      });
+    }
 
     return {
       bookings: docs, // Return Mongoose docs with populated tripId
@@ -370,6 +401,90 @@ class MongoBookingRequestRepository {
   }
 
   /**
+   * Admin declines a pending booking (pending -> declined_by_admin)
+   * @param {string} id - Booking request ID
+   * @param {string} adminId - Admin user id
+   * @param {string} reason - Optional reason
+   * @returns {Promise<BookingRequest>} Updated booking request
+   */
+  async adminDecline(id, adminId, reason = null) {
+    const updateData = {
+      status: 'declined_by_admin',
+      declinedAt: new Date(),
+      declinedBy: adminId || null
+    };
+
+    if (reason) updateData.declineReason = reason;
+
+    const doc = await BookingRequestModel.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    if (!doc) return null;
+
+    return this._toDomain(doc);
+  }
+
+  /**
+   * Cancel an accepted booking as platform (accepted -> canceled_by_platform)
+   * Uses MongoDB transaction to update booking, set refundNeeded, and deallocate seats atomically.
+   * @param {BookingRequest} bookingEntity - domain booking entity
+   * @param {MongoSeatLedgerRepository} seatLedgerRepository
+   * @returns {Promise<BookingRequest>} Updated booking request
+   */
+  async cancelByPlatformWithTransaction(bookingEntity, seatLedgerRepository) {
+    const session = await BookingRequestModel.startSession();
+
+    try {
+      let updatedBooking = null;
+
+      await session.withTransaction(async () => {
+        // 1. Update booking status to canceled_by_platform and set refundNeeded
+        const doc = await BookingRequestModel.findByIdAndUpdate(
+          bookingEntity.id,
+          {
+            status: 'canceled_by_platform',
+            canceledAt: new Date(),
+            cancellationReason: bookingEntity.cancellationReason || '',
+            refundNeeded: true,
+            updatedAt: new Date()
+          },
+          { new: true, runValidators: true, session }
+        );
+
+        if (!doc) {
+          throw new Error(`Booking request not found: ${bookingEntity.id}`);
+        }
+
+        // 2. Atomically deallocate seats from ledger
+        const ledgerUpdated = await seatLedgerRepository.deallocateSeats(
+          bookingEntity.tripId,
+          bookingEntity.seats
+        );
+
+        if (!ledgerUpdated) {
+          throw new Error(
+            `Failed to deallocate seats atomically. Ledger may not exist or would go negative. tripId: ${bookingEntity.tripId}, seats: ${bookingEntity.seats}`
+          );
+        }
+
+        updatedBooking = doc;
+      });
+
+      return updatedBooking ? this._toDomain(updatedBooking) : null;
+    } catch (error) {
+      console.error(
+        `[MongoBookingRequestRepository] Transaction failed during cancelByPlatform | bookingId: ${bookingEntity.id} | tripId: ${bookingEntity.tripId} | error: ${error.message}`
+      );
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+  }
+
+  /**
    * Find all pending bookings for a trip (no pagination)
    * Used for cascade operations when driver cancels trip
    * @param {string} tripId - Trip ID
@@ -418,7 +533,7 @@ class MongoBookingRequestRepository {
         $set: {
           status: 'declined_auto',
           declinedAt: new Date(),
-          declinedBy: 'system',
+          declinedBy: null, // Auto-declined by system (no specific user)
           updatedAt: new Date()
         }
       },
@@ -482,28 +597,6 @@ class MongoBookingRequestRepository {
     return result.modifiedCount;
   }
 
-  /**
-   * Mark booking as paid (US-4.1.5)
-   * Updates isPaid flag when payment transaction succeeds
-   * Idempotent: Safe to call multiple times
-   * 
-   * @param {string} bookingId - Booking request ID
-   * @returns {Promise<BookingRequest|null>} Updated booking or null if not found
-   */
-  async markAsPaid(bookingId) {
-    const doc = await BookingRequestModel.findByIdAndUpdate(
-      bookingId,
-      {
-        $set: {
-          isPaid: true,
-          updatedAt: new Date()
-        }
-      },
-      { new: true, runValidators: true }
-    );
-
-    return this._toDomain(doc);
-  }
 
   /**
    * Delete booking request (for testing only)

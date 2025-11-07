@@ -18,6 +18,9 @@ const { requireRole } = require('../middlewares/authenticate');
 const requireCsrf = require('../middlewares/requireCsrf');
 const validateRequest = require('../middlewares/validateRequest');
 const { runJobQuerySchema } = require('../validation/internalSchemas');
+const { renderTemplateBodySchema, dispatchNotificationBodySchema } = require('../validation/internalSchemas');
+const { validateTemplateBodySchema } = require('../validation/internalSchemas');
+const templateRegistry = require('../../domain/services/templateRegistry');
 
 /**
  * @route   POST /internal/jobs/run
@@ -141,7 +144,135 @@ router.post(
   requireRole('admin'),
   requireCsrf,
   validateRequest(runJobQuerySchema, 'query'),
-  internalController.runLifecycleJob
+  internalController.runLifecycleJob.bind(internalController)
+);
+
+/**
+ * @route POST /internal/notifications/templates/render
+ * @desc  Preview notification templates (admin-only, read-only)
+ * Body: { channel, type, variables }
+ */
+router.post(
+  '/notifications/templates/render',
+  authenticate,
+  requireRole('admin'),
+  validateRequest(renderTemplateBodySchema, 'body'),
+  internalController.renderTemplate.bind(internalController)
+);
+
+/**
+ * GET /internal/notifications/templates/registry
+ * Admin-only: list template metadata
+ */
+router.get(
+  '/notifications/templates/registry',
+  authenticate,
+  requireRole('admin'),
+  (req, res) => {
+    const items = templateRegistry.listMetadata();
+    res.status(200).json({ items });
+  }
+);
+
+/**
+ * POST /internal/notifications/templates/validate
+ * Admin-only: validate a draft template payload (no side-effects)
+ */
+router.post(
+  '/notifications/templates/validate',
+  authenticate,
+  requireRole('admin'),
+  validateRequest(validateTemplateBodySchema, 'body'),
+  internalController.validateTemplate.bind(internalController)
+);
+
+/**
+ * GET /admin/notifications/metrics
+ * Admin-only: aggregated delivery metrics per type/channel/date range
+ */
+router.get(
+  '/admin/notifications/metrics',
+  authenticate,
+  requireRole('admin'),
+  async (req, res) => {
+    const { from, to } = req.query;
+    const metricsService = require('../../domain/services/notificationMetrics');
+    try {
+      const result = await metricsService.queryRange(from || new Date(), to || new Date());
+      res.status(200).json(result);
+    } catch (err) {
+      console.error('[InternalRoutes] metrics query failed', err);
+      res.status(500).json({ code: 'server_error', message: 'Metrics query failed' });
+    }
+  }
+);
+
+router.post(
+  '/notifications/dispatch',
+  authenticate,
+  requireRole('admin'),
+  requireCsrf,
+  validateRequest(dispatchNotificationBodySchema, 'body'),
+  internalController.dispatchNotification.bind(internalController)
+);
+
+// Admin: generate short-lived preview URL for driver document (admin-only)
+router.get(
+  '/admin/drivers/:driverId/verification/documents/:docType/url',
+  authenticate,
+  requireRole('admin'),
+  internalController.generateDocumentPreviewUrl.bind(internalController)
+);
+
+// Public preview endpoint: serves single-use token-protected documents (no auth)
+router.get('/previews/:token', internalController.servePreviewByToken.bind(internalController));
+
+/**
+ * PATCH /admin/drivers/:driverId/verification
+ * Admin review endpoint: approve | reject
+ */
+const { reviewDriverVerificationBodySchema } = require('../validation/internalSchemas');
+router.patch(
+  '/admin/drivers/:driverId/verification',
+  authenticate,
+  requireRole('admin'),
+  requireCsrf,
+  validateRequest(reviewDriverVerificationBodySchema, 'body'),
+  internalController.reviewDriverVerification.bind(internalController)
+);
+
+// Admin review moderation: hide/unhide reviews
+const ReviewController = require('../controllers/reviewController');
+const reviewController = new ReviewController();
+const { reviewIdParamSchema } = require('../validation/reviewSchemas');
+
+router.patch(
+  '/admin/reviews/:reviewId/hide',
+  authenticate,
+  requireRole('admin'),
+  requireCsrf,
+  validateRequest(reviewIdParamSchema, 'params'),
+  reviewController.adminHideReview.bind(reviewController)
+);
+
+router.patch(
+  '/admin/reviews/:reviewId/unhide',
+  authenticate,
+  requireRole('admin'),
+  requireCsrf,
+  validateRequest(reviewIdParamSchema, 'params'),
+  reviewController.adminUnhideReview.bind(reviewController)
+);
+
+// Admin batch endpoint: set visibility with reason
+router.patch(
+  '/admin/reviews/:reviewId/visibility',
+  authenticate,
+  requireRole('admin'),
+  requireCsrf,
+  validateRequest(reviewIdParamSchema, 'params'),
+  validateRequest(require('../validation/reviewSchemas').adminVisibilityBodySchema, 'body'),
+  reviewController.adminSetVisibility.bind(reviewController)
 );
 
 module.exports = router;

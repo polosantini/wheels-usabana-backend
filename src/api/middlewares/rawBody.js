@@ -21,16 +21,18 @@
  * @param {Function} next - Next middleware
  */
 function rawBodyMiddleware(req, res, next) {
-  // Only collect raw body for webhook endpoints
-  if (req.path.includes('/webhook')) {
+  // Only collect raw body for webhook endpoints.
+  // Use originalUrl so middleware works when mounted on routers (req.path may be relative).
+  const urlToCheck = req.originalUrl || req.url || '';
+  if (urlToCheck.includes('/webhook')) {
     let data = '';
-    
+
     req.setEncoding('utf8');
-    
+
     req.on('data', (chunk) => {
       data += chunk;
     });
-    
+
     req.on('end', () => {
       req.rawBody = data;
       next();

@@ -18,6 +18,10 @@ const {
   tripIdParamSchema,
   bookingIdParamSchema
 } = require('../validation/bookingRequestSchemas');
+const { listReviewsQuerySchema } = require('../validation/reviewSchemas');
+const ReviewController = require('../controllers/reviewController');
+const reviewController = new ReviewController();
+const { verificationUpload, handleUploadError, cleanupOnError } = require('../middlewares/uploadMiddleware');
 
 /**
  * @route   GET /drivers/trips/:tripId/booking-requests
@@ -317,6 +321,50 @@ router.post(
   requireCsrf,
   validateRequest(bookingIdParamSchema, 'params'),
   driverController.declineBookingRequest
+);
+
+/**
+ * Public: GET /drivers/:driverId/reviews?page=1&pageSize=10
+ * Lists visible reviews for a driver (public)
+ */
+router.get(
+  '/:driverId/reviews',
+  validateRequest(listReviewsQuerySchema, 'query'),
+  reviewController.listReviewsForDriver.bind(reviewController)
+);
+
+// GET /drivers/:driverId/ratings (public)
+router.get(
+  '/:driverId/ratings',
+  reviewController.getDriverRatings.bind(reviewController)
+);
+
+/**
+ * POST /drivers/verification
+ * Driver submits verification documents
+ */
+router.post(
+  '/verification',
+  authenticate,
+  requireRole('driver'),
+  requireCsrf,
+  verificationUpload.fields([
+    { name: 'govIdFront', maxCount: 1 },
+    { name: 'govIdBack', maxCount: 1 },
+    { name: 'driverLicense', maxCount: 1 },
+    { name: 'soat', maxCount: 1 }
+  ]),
+  handleUploadError,
+  cleanupOnError,
+  driverController.submitVerification.bind(driverController)
+);
+
+// GET my verification profile (owner-only, driver)
+router.get(
+  '/verification',
+  authenticate,
+  requireRole('driver'),
+  driverController.getMyVerification.bind(driverController)
 );
 
 /**

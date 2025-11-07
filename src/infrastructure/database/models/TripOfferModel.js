@@ -80,7 +80,7 @@ const tripOfferSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['draft', 'published', 'canceled', 'completed'],
+      enum: ['draft', 'published', 'in_progress', 'canceled', 'completed'],
       default: 'published',
       index: true
     },
@@ -141,7 +141,7 @@ tripOfferSchema.virtual('isPast').get(function () {
 
 // Virtual for checking if trip is editable
 tripOfferSchema.virtual('isEditable').get(function () {
-  return this.status !== 'canceled' && this.status !== 'completed';
+  return this.status !== 'canceled' && this.status !== 'completed' && this.status !== 'in_progress';
 });
 
 // Instance method: Check if trip overlaps with another time window

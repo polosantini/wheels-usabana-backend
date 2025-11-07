@@ -91,10 +91,34 @@ const passwordResetRateLimiter = rateLimit({
   }
 });
 
+/**
+ * Rate limiter for notification preference updates
+ * - Small window to avoid rapid toggling
+ * - Returns 429 with Retry-After header when exceeded
+ */
+const preferenceUpdateRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 2, // max 2 preference updates per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ip,
+  handler: (req, res /*, next */) => {
+    const retryAfterSec = Math.ceil((req.rateLimit && req.rateLimit.resetTime && (req.rateLimit.resetTime - Date.now())) / 1000) || Math.ceil(60);
+    res.set('Retry-After', String(retryAfterSec));
+    return res.status(429).json({ code: 'rate_limit_exceeded', message: 'Too many preference updates, please try again later' });
+  },
+  skip: (req) => {
+    return process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+  }
+});
+
 module.exports = {
   publicRateLimiter,
   generalRateLimiter,
   loginRateLimiter,
   passwordResetRateLimiter
 };
+// Export preference limiter for routes that update user preferences
+module.exports.preferenceUpdateRateLimiter = preferenceUpdateRateLimiter;
+
 

@@ -375,6 +375,152 @@ paths:
               properties:
                 corporateEmail:
                   type: string
+
+# Notifications API (added by Subtask 5.1.5)
+paths:
+  /notifications:
+    get:
+      tags:
+        - Notifications
+      summary: List in-app notifications for the authenticated user
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [unread, all]
+            default: all
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        '200':
+          description: Notification list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        type: { type: string }
+                        title: { type: string }
+                        body: { type: string }
+                        data: { type: object }
+                        isRead: { type: boolean }
+                        createdAt: { type: string, format: date-time }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+                  total: { type: integer }
+                  totalPages: { type: integer }
+        '401':
+          $ref: '#/components/responses/ErrorUnauthorized'
+
+  /notifications/read:
+    patch:
+      tags:
+        - Notifications
+      summary: Mark notifications as read (owner only)
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Updated count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated: { type: integer }
+        '400':
+          $ref: '#/components/responses/ErrorValidation'
+        '401':
+          $ref: '#/components/responses/ErrorUnauthorized'
+
+  /notifications/webhooks/email:
+    post:
+      tags:
+        - Webhooks
+      summary: Email provider webhook (signature-verified)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      parameters:
+        - in: header
+          name: X-Provider-Signature
+          required: true
+          schema:
+            type: string
+          description: 'Signature header in format t=<timestamp>,v1=<hex>'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+        '400':
+          $ref: '#/components/responses/ErrorInvalidSignature'
+
+  /internal/notifications/dispatch:
+    post:
+      tags:
+        - Internal
+      summary: Admin-only dispatch of notifications (preview/send simulation)
+      security:
+        - cookieAuth: []
+      responses:
+        '201':
+          $ref: '#/components/responses/NotificationDispatched'
+        '403':
+          $ref: '#/components/responses/ErrorForbiddenRole'
+
+  /internal/notifications/templates/render:
+    post:
+      tags:
+        - Internal
+      summary: Admin-only preview of notification templates
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Rendered template
+        '403':
+          $ref: '#/components/responses/ErrorForbiddenRole'
+
                   format: email
                   example: jdoe@unisabana.edu.co
                 password:

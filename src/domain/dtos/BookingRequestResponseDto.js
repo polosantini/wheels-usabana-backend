@@ -19,7 +19,7 @@ class BookingRequestResponseDto {
     seats,
     note,
     canceledAt,
-    isPaid = false, // US-4.1.5: Payment status
+    isPaid = false, // Payment functionality removed
     createdAt,
     updatedAt,
     // Optional populated trip data (for list responses)
@@ -34,7 +34,7 @@ class BookingRequestResponseDto {
     this.seats = seats;
     this.note = note;
     this.canceledAt = canceledAt;
-    this.isPaid = isPaid; // US-4.1.5: Payment status
+      this.isPaid = false; // Payment functionality removed
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
 
@@ -83,7 +83,7 @@ class BookingRequestResponseDto {
       seats: bookingRequest.seats,
       note: bookingRequest.note,
       canceledAt: bookingRequest.canceledAt,
-      isPaid: bookingRequest.isPaid || false, // US-4.1.5
+      isPaid: false, // Payment functionality removed
       createdAt: bookingRequest.createdAt,
       updatedAt: bookingRequest.updatedAt
     });
@@ -97,6 +97,14 @@ class BookingRequestResponseDto {
   static fromDocument(doc) {
     const obj = doc.toObject ? doc.toObject() : doc;
 
+    // Check if trip is populated (should be an object with origin field)
+    const tripIsPopulated = obj.tripId && typeof obj.tripId === 'object' && obj.tripId.origin;
+    
+    // Debug log if trip is not populated but tripId exists
+    if (obj.tripId && !tripIsPopulated) {
+      console.warn(`[BookingRequestResponseDto] Trip not populated for booking ${obj._id?.toString() || obj.id} | tripId: ${obj.tripId?.toString() || obj.tripId} | tripId type: ${typeof obj.tripId}`);
+    }
+
     return new BookingRequestResponseDto({
       id: obj._id?.toString() || obj.id,
       tripId: obj.tripId?._id?.toString() || obj.tripId?.toString() || obj.tripId,
@@ -105,11 +113,11 @@ class BookingRequestResponseDto {
       seats: obj.seats,
       note: obj.note || '',
       canceledAt: obj.canceledAt,
-      isPaid: obj.isPaid || false, // US-4.1.5
+      isPaid: false, // Payment functionality removed
       createdAt: obj.createdAt,
       updatedAt: obj.updatedAt,
       // Include populated trip if available
-      trip: obj.tripId && typeof obj.tripId === 'object' && obj.tripId.origin ? obj.tripId : null,
+      trip: tripIsPopulated ? obj.tripId : null,
       // Include populated passenger if available
       passenger: obj.passengerId && typeof obj.passengerId === 'object' && obj.passengerId.firstName ? obj.passengerId : null
     });

@@ -18,6 +18,11 @@ const bookingRequestService = new BookingRequestService(
   bookingRequestRepository,
   tripOfferRepository
 );
+const DriverVerification = require('../../infrastructure/database/models/DriverVerificationModel');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const { verificationUpload } = require('../middlewares/uploadMiddleware');
 
 class DriverController {
   /**
@@ -232,6 +237,187 @@ class DriverController {
   }
 
   /**
+   * POST /drivers/verification
+   * Driver submits verification documents (multipart/form-data)
+   */
+  async submitVerification(req, res, next) {
+    try {
+      // This method is intended to be used after multer processed files.
+      const userId = req.user.sub || req.user.id;
+      const correlationId = req.correlationId;
+
+      // Required form fields
+      const {
+        fullName,
+        documentNumber,
+        licenseNumber,
+        licenseExpiresAt,
+        soatNumber,
+        soatExpiresAt
+      } = req.body || {};
+
+      // Files: provided by multer as req.files
+      const files = req.files || {};
+
+      // Validate required fields and files
+      if (!fullName || !documentNumber || !licenseNumber || !licenseExpiresAt || !soatNumber || !soatExpiresAt) {
+        return res.status(400).json({ code: 'invalid_schema', message: 'Missing or invalid fields', correlationId });
+      }
+
+      if (!files.govIdFront || !files.driverLicense || !files.soat) {
+        return res.status(400).json({ code: 'invalid_schema', message: 'Missing required files', correlationId });
+      }
+
+      // Helper to compute sha256 hash of a file
+      const fileHash = (filePath) => {
+        const buf = fs.readFileSync(filePath);
+        return crypto.createHash('sha256').update(buf).digest('hex');
+      };
+
+      // Build document objects
+      const now = new Date();
+      const created = {
+        govIdFront: {
+          storagePath: files.govIdFront[0].path,
+          hash: fileHash(files.govIdFront[0].path),
+          uploadedAt: now,
+          expiresAt: null
+        },
+        govIdBack: files.govIdBack ? {
+          storagePath: files.govIdBack[0].path,
+          hash: fileHash(files.govIdBack[0].path),
+          uploadedAt: now,
+          expiresAt: null
+        } : undefined,
+        driverLicense: {
+          storagePath: files.driverLicense[0].path,
+          hash: fileHash(files.driverLicense[0].path),
+          uploadedAt: now,
+          expiresAt: new Date(licenseExpiresAt)
+        },
+        soat: {
+          storagePath: files.soat[0].path,
+          hash: fileHash(files.soat[0].path),
+          uploadedAt: now,
+          expiresAt: new Date(soatExpiresAt)
+        }
+      };
+
+      // Prepare hashed identifiers for numbers (store hashed to avoid PII)
+      const documentNumberHash = crypto.createHash('sha256').update(String(documentNumber)).digest('hex');
+      const licenseNumberHash = crypto.createHash('sha256').update(String(licenseNumber)).digest('hex');
+      const soatNumberHash = crypto.createHash('sha256').update(String(soatNumber)).digest('hex');
+
+      // Upsert DriverVerification record (idempotent re-submission replaces docs)
+      let existing = await DriverVerification.findOne({ userId });
+
+      // If existing, optionally delete old stored files (best-effort)
+      try {
+        if (existing && existing.documents) {
+          const oldPaths = [];
+          ['govIdFront','govIdBack','driverLicense','soat'].forEach(k => {
+            if (existing.documents[k] && existing.documents[k].storagePath) oldPaths.push(existing.documents[k].storagePath);
+          });
+          oldPaths.forEach(p => {
+            try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch(e) { console.warn('Could not remove old verification file', e.message); }
+          });
+        }
+      } catch (e) {
+        // ignore cleanup errors
+      }
+
+      const saveDoc = {
+        userId,
+        status: 'pending_review',
+        fullName,
+        documentNumberHash,
+        documents: {
+          govIdFront: created.govIdFront,
+          govIdBack: created.govIdBack,
+          driverLicense: created.driverLicense,
+          soat: created.soat
+        },
+        licenseNumberHash,
+        soatNumberHash,
+        submittedAt: now,
+        lastUpdatedAt: now
+      };
+
+      // Persist
+      let upserted = null;
+      try {
+        upserted = await DriverVerification.findOneAndUpdate({ userId }, saveDoc, { upsert: true, new: true, setDefaultsOnInsert: true });
+      } catch (err) {
+        // Rollback uploaded files on DB failure
+        const newPaths = [];
+        Object.values(files).forEach(arr => { if (Array.isArray(arr)) newPaths.push(arr[0].path); });
+        newPaths.forEach(p => { try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch(e){} });
+        console.error('[DriverController] Failed to persist verification profile:', err.message);
+        return res.status(500).json({ code: 'internal_error', message: 'Failed to save verification', correlationId });
+      }
+
+      // Response: minimal non-PII profile per contract (note: documentNumber included as example)
+      const resp = {
+        status: upserted.status,
+        submittedAt: upserted.submittedAt,
+        profile: {
+          fullName: upserted.fullName,
+          documentNumber: documentNumber,
+          license: { number: licenseNumber, expiresAt: upserted.documents.driverLicense.expiresAt },
+          soat: { number: soatNumber, expiresAt: upserted.documents.soat.expiresAt }
+        }
+      };
+
+      return res.status(201).json(resp);
+    } catch (err) {
+      // Cleanup any uploaded files on unexpected error
+      try {
+        const files = req.files || {};
+        Object.values(files).forEach(arr => { if (Array.isArray(arr) && arr[0] && arr[0].path) {
+          try { fs.unlinkSync(arr[0].path); } catch(e){}
+        }});
+      } catch (e) {}
+      console.error('[DriverController] submitVerification error:', err);
+      next(err);
+    }
+  }
+
+  /**
+   * GET /drivers/verification
+   * Owner-only read of current verification profile (non-PII)
+   */
+  async getMyVerification(req, res, next) {
+    try {
+      const userId = req.user.sub || req.user.id;
+      const correlationId = req.correlationId;
+
+      const profile = await DriverVerification.findOne({ userId }).lean();
+      if (!profile) {
+        return res.status(404).json({ code: 'not_found', message: 'No verification profile yet', correlationId });
+      }
+
+      // Build documents summary without exposing storage paths or raw filenames
+      const docs = [];
+      const docKeys = [ 'govIdFront', 'govIdBack', 'driverLicense', 'soat' ];
+      docKeys.forEach((k) => {
+        const d = profile.documents && profile.documents[k];
+        if (d && d.uploadedAt) {
+          const ext = d.storagePath ? require('path').extname(d.storagePath) : '';
+          // Masked name: use type + ext (no original filename)
+          const maskedName = `${k}${ext}`;
+          docs.push({ type: k, uploadedAt: d.uploadedAt, name: maskedName });
+        }
+      });
+
+      const review = (profile.adminNotes && profile.adminNotes.length > 0) ? profile.adminNotes[profile.adminNotes.length - 1] : null;
+
+      return res.status(200).json({ status: profile.status, submittedAt: profile.submittedAt, documents: docs, review });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
    * DELETE /drivers/trips/:tripId
    * 
    * Cancel a trip with cascade to all bookings (US-3.4.2).
@@ -330,3 +516,4 @@ class DriverController {
 }
 
 module.exports = new DriverController();
+

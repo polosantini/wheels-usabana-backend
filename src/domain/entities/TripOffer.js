@@ -56,7 +56,7 @@ class TripOffer {
    * Check if trip is editable
    */
   isEditable() {
-    return this.status !== 'canceled' && this.status !== 'completed';
+    return this.status !== 'canceled' && this.status !== 'completed' && this.status !== 'in_progress';
   }
 
   /**
@@ -89,7 +89,8 @@ class TripOffer {
   canTransitionTo(newStatus) {
     const validTransitions = {
       draft: ['published', 'canceled'],
-      published: ['canceled', 'completed'],
+      published: ['canceled', 'in_progress'],
+      in_progress: ['completed'],
       canceled: [], // No transitions from canceled
       completed: [] // No transitions from completed
     };
@@ -140,6 +141,44 @@ class TripOffer {
       );
     }
     this.status = 'canceled';
+    this.updatedAt = new Date();
+  }
+
+  /**
+   * Start the trip
+   * Legal transitions: published → in_progress
+   * Throws InvalidTransitionError if current state doesn't allow starting
+   * 
+   * @throws {InvalidTransitionError} if trip cannot be started from current state
+   */
+  startTrip() {
+    if (!this.canTransitionTo('in_progress')) {
+      throw new InvalidTransitionError(
+        `Cannot start trip with status: ${this.status}`,
+        this.status,
+        'in_progress'
+      );
+    }
+    this.status = 'in_progress';
+    this.updatedAt = new Date();
+  }
+
+  /**
+   * Complete the trip
+   * Legal transitions: in_progress → completed
+   * Throws InvalidTransitionError if current state doesn't allow completion
+   * 
+   * @throws {InvalidTransitionError} if trip cannot be completed from current state
+   */
+  completeTrip() {
+    if (!this.canTransitionTo('completed')) {
+      throw new InvalidTransitionError(
+        `Cannot complete trip with status: ${this.status}`,
+        this.status,
+        'completed'
+      );
+    }
+    this.status = 'completed';
     this.updatedAt = new Date();
   }
 }

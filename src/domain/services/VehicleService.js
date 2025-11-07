@@ -22,6 +22,14 @@ class VehicleService {
    * @throws {DuplicatePlateError} - If plate already exists
    */
   async createVehicle(createVehicleDto) {
+    console.log('[VehicleService] Creating vehicle with data:', {
+      driverId: createVehicleDto.driverId,
+      plate: createVehicleDto.plate,
+      brand: createVehicleDto.brand,
+      model: createVehicleDto.model,
+      capacity: createVehicleDto.capacity
+    });
+
     // Check if driver already has a vehicle
     const hasVehicle = await this.vehicleRepository.driverHasVehicle(createVehicleDto.driverId);
     if (hasVehicle) {
@@ -43,8 +51,27 @@ class VehicleService {
     }
 
     // Create vehicle in repository
-    const vehicle = await this.vehicleRepository.create(createVehicleDto.toObject());
-    return VehicleResponseDto.fromEntity(vehicle);
+    const vehicleData = createVehicleDto.toObject();
+    console.log('[VehicleService] Vehicle data to save:', vehicleData);
+    const vehicle = await this.vehicleRepository.create(vehicleData);
+    console.log('[VehicleService] Vehicle created in repository:', {
+      id: vehicle.id,
+      plate: vehicle.plate,
+      brand: vehicle.brand,
+      model: vehicle.model,
+      capacity: vehicle.capacity
+    });
+    
+    const responseDto = VehicleResponseDto.fromEntity(vehicle);
+    console.log('[VehicleService] Response DTO:', {
+      id: responseDto.id,
+      plate: responseDto.plate,
+      brand: responseDto.brand,
+      model: responseDto.model,
+      capacity: responseDto.capacity
+    });
+    
+    return responseDto;
   }
 
   /**
